@@ -1,71 +1,185 @@
-# CMMS Local API
+# Local CMMS LLM API
 
-## 项目简介
-这是一个本地 CMMS LLM API 包装器，运行在 Windows 上。
+## Overview
+This repository contains a local, Windows-friendly wrapper API for controlled CMMS work order intake using a local Ollama LLM model.
 
-- 使用本地 `Ollama` 的 `qwen3:8b` 模型
-- 提供受控的 CMMS 工单 intake AI 辅助接口
-- 仅用于摘要、字段提取、规则验证和草稿生成
-- 不直接写入 CMMS、不创建工单、不审批、不发送邮件
+The service is designed to provide AI-assisted summaries, field extraction, validation, and draft generation for facility management requests. It intentionally does not perform any write operations to a CMMS system, create work orders, approve requests, or send email messages.
 
-## 快速启动
+## Key Features
 
-1. 创建并激活 Python 虚拟环境：
+- Local AI inference using `Ollama` and the `qwen3:8b` model
+- FastAPI-based HTTP API with AI advisory endpoints
+- Secure API access through `x-api-key`
+- Built-in operator UI available at `/ui`
+- Deterministic intake workflow with classifier, extractor, validator, and draft generator agents
+- Clear separation of AI suggestion from actual CMMS write-back
+
+## Requirements
+
+- Windows 10/11
+- Python 3.11+ recommended
+- Ollama installed and configured
+- `qwen3:8b` model available in Ollama
+
+## Installation
+
+1. Create and activate a Python virtual environment:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\activate
 ```
 
-2. 安装依赖：
+2. Install Python dependencies:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-3. 设置 AI API key：
+3. Ensure Ollama is installed and the model is available:
+
+```powershell
+ollama --version
+ollama pull qwen3:8b
+```
+
+## Configuration
+
+Set a local AI API key before starting the service.
 
 ```powershell
 $env:LLM_API_KEY="your-secret-key"
 ```
 
-4. 启动服务：
+Optional environment settings for portal admin access:
+
+```powershell
+$env:ADMIN_USERNAME="admin"
+$env:ADMIN_PASSWORD="your-admin-password"
+```
+
+## Running the API
+
+Start the FastAPI service directly:
 
 ```powershell
 uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-5. 打开浏览器访问：
+Then open:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## 推荐启动方式
+## Recommended Startup
 
-运行以下脚本启动本地服务：
+Use the provided launcher scripts for convenience:
 
 ```powershell
 .\Start-CMMS-LLM-API.ps1
 ```
 
-或双击：
+Or use the batch script on Windows:
 
 ```text
 Start-CMMS-LLM-API.bat
 ```
 
-## 主要 API 端点
+These scripts help with environment creation, dependency installation, and starting the API.
 
-- `GET /health`
-- `POST /api/ai/summarize-work-order`
-- `POST /api/ai/extract-work-order-fields`
-- `POST /api/ai/cmms-intake`
-- `GET /ui`
+## API Endpoints
 
-## 目标
+### GET /health
 
-这个项目旨在为 CMMS 工作单 intake 提供一个安全、可审计的本地 AI 辅助层。它的设计原则是“AI 只建议，不越权”。
+Checks service status. No API key required.
+
+Response example:
+
+```json
+{
+  "status": "ok",
+  "service": "local-cmms-llm-api",
+  "model": "qwen3:8b"
+}
+```
+
+### POST /api/ai/summarize-work-order
+
+Creates a concise summary from raw intake text.
+
+Header:
+
+```text
+x-api-key: your-api-key
+```
+
+Request body example:
+
+```json
+{
+  "text": "The air conditioner in ARC room 205 is making loud noise."
+}
+```
+
+### POST /api/ai/extract-work-order-fields
+
+Extracts structured fields such as building, room, and priority.
+
+Header:
+
+```text
+x-api-key: your-api-key
+```
+
+Request body example:
+
+```json
+{
+  "text": "The air conditioner in ARC room 205 is making loud noise and the room is too warm.",
+  "valid_buildings": ["ARC", "CAMPUSVIEW", "ZONE-18"],
+  "valid_priorities": ["LOW", "NORMAL", "URGENT"]
+}
+```
+
+### POST /api/ai/cmms-intake
+
+Runs the full intake workflow with classifier, field extractor, validator, and draft generator agents.
+
+Header:
+
+```text
+x-api-key: your-api-key
+```
+
+This endpoint is intended to produce advisory output only.
+
+### GET /ui
+
+Opens the local operator console for manual review and management.
+
+```text
+http://127.0.0.1:8000/ui
+```
+
+## Testing
+
+Run the local API test script:
+
+```powershell
+.\test_api.ps1
+```
+
+## Security and Safety Notes
+
+- The AI layer is advisory only.
+- No direct CMMS updates are performed by the service.
+- Human review is required before any real work order creation.
+- Do not expose Ollama's internal port directly; only expose the FastAPI wrapper if needed.
+
+## Project Goals
+
+This project provides a safe, local AI assistant for CMMS intake workflows. It is built to keep machine intelligence under control and preserve auditability by separating suggestion from execution.
 
 The UI calls only the controlled advisory endpoints. It is not a generic chat interface.
 
@@ -135,3 +249,75 @@ Admin users can create environment codes in the portal. API calls can pass:
 When `environment_code` is provided, the API loads buildings, rooms, priorities, work order types, assignment values, employee numbers, and job types from the saved environment configuration.
 
 The older `valid_buildings` and `valid_priorities` request shape still works for compatibility.
+
+## Quick Start Examples
+
+### Summary example
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/ai/summarize-work-order" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key" \
+  -d '{"text": "The air conditioner in ARC room 205 is making loud noise and the room is too warm."}'
+```
+
+Expected response:
+
+```json
+{
+  "summary": "Air conditioner in ARC room 205 is making loud noise and the room is too warm."
+}
+```
+
+### Field extraction example
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/ai/extract-work-order-fields" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key" \
+  -d '{"text": "The air conditioner in ARC room 205 is making loud noise and the room is too warm.", "valid_buildings": ["ARC", "CAMPUSVIEW", "ZONE-18"], "valid_priorities": ["LOW", "NORMAL", "URGENT"]}'
+```
+
+Expected response structure:
+
+```json
+{
+  "building": "ARC",
+  "room": "205",
+  "priority": "NORMAL",
+  "issue": "Air conditioner making loud noise and room too warm"
+}
+```
+
+### CMMS intake workflow example
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/ai/cmms-intake" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key" \
+  -d '{"text": "The air conditioner in ARC room 205 is making loud noise and the room is too warm."}'
+```
+
+This endpoint returns advisory output only and may include classification, extracted fields, validation details, and a draft work order description.
+
+## FAQ
+
+### What is the difference between `/api/ai/cmms-intake` and `/api/ai/extract-work-order-fields`?
+
+`/api/ai/extract-work-order-fields` returns structured field extraction from text only. `/api/ai/cmms-intake` runs the full intake workflow, including classification, validation, and draft generation.
+
+### Can this service create actual CMMS work orders?
+
+No. The service is intentionally advisory only. It does not write to any CMMS database, create work orders, approve requests, or send emails.
+
+### Do I need a live internet connection?
+
+No, as long as `Ollama` and the `qwen3:8b` model are installed locally. The API itself is hosted on your machine.
+
+### How should I protect the API?
+
+Only run the service on trusted local hardware. Use `x-api-key` for endpoint authentication, and do not expose `http://127.0.0.1:8000` directly to untrusted networks without a secure proxy.
+
+### Where are API keys stored?
+
+Generated keys are stored in `data/portal.db` as hashed values. The compatibility key from `LLM_API_KEY` is not stored in the portal database.
