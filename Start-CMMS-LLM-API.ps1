@@ -100,8 +100,12 @@ function Start-OllamaIfNeeded {
 }
 
 if (-not $env:LLM_API_KEY) {
-    $env:LLM_API_KEY = "my-secret-key"
-    Write-Log "LLM_API_KEY defaulted"
+    Write-Host "LLM_API_KEY must be set before startup." -ForegroundColor Red
+    Write-Host "Example:" -ForegroundColor Yellow
+    Write-Host '  $env:LLM_API_KEY="use-a-long-unique-api-key"' -ForegroundColor Yellow
+    Write-Log "llm_api_key_missing"
+    Read-Host "Press Enter to exit"
+    exit 1
 }
 
 if (-not $env:ADMIN_USERNAME -or -not $env:ADMIN_PASSWORD) {
@@ -175,7 +179,7 @@ if (-not $ModelAvailable) {
 Write-Step "Starting local CMMS LLM API"
 Write-Host "API: $ApiUrl"
 Write-Host "UI:  $UiUrl"
-Write-Host "API key: $env:LLM_API_KEY"
+Write-Host "API key: loaded from environment/.env"
 Write-Host ""
 Write-Host "Cloudflare Tunnel is not started automatically."
 Write-Host "Press Ctrl+C in this window to stop the API."

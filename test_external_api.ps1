@@ -2,7 +2,22 @@
 # Set this to the generated https://*.trycloudflare.com URL from:
 # cloudflared tunnel --url http://localhost:8000
 $BaseUrl = "https://replace-with-your-trycloudflare-url.trycloudflare.com"
-$ApiKey = "my-secret-key"
+
+function Import-DotEnv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $Line = $_.Trim()
+        if (-not $Line -or $Line.StartsWith("#") -or -not $Line.Contains("=")) { return }
+        $Name, $Value = $Line.Split("=", 2)
+        if ($Name.Trim() -eq "LLM_API_KEY" -and -not $env:LLM_API_KEY) {
+            $env:LLM_API_KEY = $Value.Trim().Trim('"')
+        }
+    }
+}
+
+Import-DotEnv (Join-Path $PSScriptRoot ".env")
+$ApiKey = if ($env:LLM_API_KEY) { $env:LLM_API_KEY } else { "my-secret-key" }
 
 function Write-Section {
     param([string]$Title)
