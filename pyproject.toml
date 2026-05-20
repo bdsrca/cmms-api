@@ -1,0 +1,5 @@
+[project]
+name = "cmms-api-showcase"
+version = "0.1.0"
+description = "Public-safe showcase for a secure CMMS private LLM API control plane"
+requires-python = ">=3.10"

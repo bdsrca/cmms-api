@@ -32,7 +32,46 @@ from .db import (
     db_fetchall,
     db_fetchone,
 )
+from .prompt_comparisons import (
+    get_prompt_comparison as get_prompt_comparison_helper,
+    list_prompt_comparisons as list_prompt_comparisons_helper,
+    run_prompt_comparison as run_prompt_comparison_helper,
+)
+from .prompt_promotions import (
+    active_prompt_for_endpoint,
+    check_prompt_promotion_gate,
+    get_prompt_promotion as get_prompt_promotion_helper,
+    list_prompt_promotions as list_prompt_promotions_helper,
+    record_prompt_promotion,
+)
 from .regression_dashboard import build_regression_dashboard
+from .test_cases import (
+    create_test_case as create_test_case_helper,
+    create_test_case_from_workflow_run as create_test_case_from_workflow_run_helper,
+    delete_test_case as delete_test_case_helper,
+    get_test_case as get_test_case_helper,
+    get_test_case_run as get_test_case_run_helper,
+    list_test_case_runs as list_test_case_runs_helper,
+    list_test_cases as list_test_cases_helper,
+    patch_test_case as patch_test_case_helper,
+    replay_workflow_run as replay_workflow_run_helper,
+    run_test_case as run_test_case_helper,
+    run_test_case_batch as run_test_case_batch_helper,
+    run_test_case_row as run_test_case_row_helper,
+)
+from .test_suites import (
+    add_test_suite_case as add_test_suite_case_helper,
+    create_test_suite as create_test_suite_helper,
+    delete_test_suite as delete_test_suite_helper,
+    get_test_suite as get_test_suite_helper,
+    get_test_suite_run as get_test_suite_run_helper,
+    list_test_suite_runs as list_test_suite_runs_helper,
+    list_test_suites as list_test_suites_helper,
+    patch_test_suite as patch_test_suite_helper,
+    remove_test_suite_case as remove_test_suite_case_helper,
+    run_test_suite as run_test_suite_helper,
+    run_test_suite_batch as run_test_suite_batch_helper,
+)
 from .workflow_trace import (
     cleanup_workflow_runs,
     fail_workflow_step,
@@ -2123,87 +2162,6 @@ def extract_result_value(response: dict[str, Any], field: str) -> Any:
     if field == "work_order_type":
         return result.get("work_order_type") or response.get("request_type")
     return fields.get(field)
-
-
-def issue_fields(items: Any) -> set[str]:
-    fields: set[str] = set()
-    if not isinstance(items, list):
-        return fields
-    for item in items:
-        if isinstance(item, dict):
-            value = item.get("field") or item.get("message") or ""
-        else:
-            value = str(item)
-        fields.add(str(value).lower())
-    return fields
-
-
-def compare_test_case_result(expected_json: dict[str, Any] | None, actual_response: dict[str, Any]) -> dict[str, Any]:
-    expected = expected_json or {}
-    field_results = []
-    passed = True
-    for field in ["building", "room", "priority", "work_order_type", "assign_to", "issue_to", "job_type"]:
-        if field not in expected:
-            continue
-        actual = extract_result_value(actual_response, field)
-        ok = actual == expected.get(field)
-        passed = passed and ok
-        field_results.append({"field": field, "expected": expected.get(field), "actual": actual, "passed": ok})
-
-    summary_results = []
-    summary = str(extract_result_value(actual_response, "summary") or actual_response.get("summary") or "").lower()
-    for needle in expected.get("summary_contains") or []:
-        ok = str(needle).lower() in summary
-        passed = passed and ok
-        summary_results.append({"contains": needle, "passed": ok})
-
-    contract_result = {}
-    if "contract_valid" in expected:
-        actual = actual_response.get("contract", {}).get("valid") if isinstance(actual_response.get("contract"), dict) else None
-        ok = actual == expected["contract_valid"]
-        passed = passed and ok
-        contract_result = {"expected": expected["contract_valid"], "actual": actual, "passed": ok}
-
-    environment_result = {}
-    ai_validation = actual_response.get("ai_validation") if isinstance(actual_response.get("ai_validation"), dict) else {}
-    if "environment_valid" in expected:
-        actual = ai_validation.get("valid")
-        ok = actual == expected["environment_valid"]
-        passed = passed and ok
-        environment_result["valid"] = {"expected": expected["environment_valid"], "actual": actual, "passed": ok}
-
-    expected_errors = {str(value).lower() for value in expected.get("expected_errors") or []}
-    expected_warnings = {str(value).lower() for value in expected.get("expected_warnings") or []}
-    actual_error_fields = issue_fields(ai_validation.get("errors"))
-    actual_warning_fields = issue_fields(ai_validation.get("warnings"))
-    if expected_errors:
-        ok = all(any(expected_field in actual_field for actual_field in actual_error_fields) for expected_field in expected_errors)
-        passed = passed and ok
-        environment_result["expected_errors"] = {"expected": sorted(expected_errors), "actual": sorted(actual_error_fields), "passed": ok}
-    if expected_warnings:
-        ok = all(any(expected_field in actual_field for actual_field in actual_warning_fields) for expected_field in expected_warnings)
-        passed = passed and ok
-        environment_result["expected_warnings"] = {"expected": sorted(expected_warnings), "actual": sorted(actual_warning_fields), "passed": ok}
-
-    return {
-        "passed": passed,
-        "field_results": field_results,
-        "summary_results": summary_results,
-        "contract_result": contract_result,
-        "environment_result": environment_result,
-        "summary": "All assertions passed." if passed else "One or more assertions failed.",
-    }
-
-
-def test_case_run_status(comparison: dict[str, Any]) -> str:
-    if comparison.get("passed"):
-        return "passed"
-    return "failed"
-
-
-def prompt_version_label(prompt_id: int | None, endpoint: str) -> tuple[int | None, str | None]:
-    row = prompt_row_for(endpoint, prompt_id)
-    return row["id"], row["version"]
 
 
 async def execute_ai_endpoint_for_test(
@@ -4716,6 +4674,36 @@ async def test_prompt_version(prompt_id: int, payload: PromptTestRequest, user: 
     }
 
 
+def test_case_runner_kwargs() -> dict[str, Any]:
+    return {
+        "endpoint_runner": execute_ai_endpoint_for_test,
+        "prompt_row_for": prompt_row_for,
+        "supported_prompt_endpoints": SUPPORTED_PROMPT_ENDPOINTS,
+    }
+
+
+def test_suite_runner_kwargs() -> dict[str, Any]:
+    return {
+        "run_test_case_row": run_test_case_row_helper,
+        "prompt_row_for": prompt_row_for,
+        "supported_prompt_endpoints": SUPPORTED_PROMPT_ENDPOINTS,
+        "test_case_runner_kwargs": test_case_runner_kwargs(),
+    }
+
+
+async def run_test_case_row_for_prompt_comparison(
+    row: sqlite3.Row,
+    prompt_id: int | None = None,
+    environment_override: str | None = None,
+) -> dict[str, Any]:
+    return await run_test_case_row_helper(
+        row,
+        prompt_id=prompt_id,
+        environment_override=environment_override,
+        **test_case_runner_kwargs(),
+    )
+
+
 @app.get("/api/admin/test-cases")
 async def list_test_cases(
     endpoint: str | None = None,
@@ -4723,647 +4711,52 @@ async def list_test_cases(
     enabled: bool | None = None,
     user: PortalUser = Depends(current_admin),
 ) -> list[dict[str, Any]]:
-    filters = []
-    params: list[Any] = []
-    if endpoint:
-        filters.append("endpoint = ?")
-        params.append(endpoint)
-    if environment_code:
-        filters.append("environment_code = ?")
-        params.append(environment_code.upper())
-    if enabled is not None:
-        filters.append("enabled = ?")
-        params.append(1 if enabled else 0)
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    rows = db_fetchall(f"SELECT * FROM ai_test_cases {where} ORDER BY updated_at DESC, id DESC", tuple(params))
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["expected_json"] = json.loads(item["expected_json"]) if item.get("expected_json") else None
-        result.append(item)
-    return result
+    return list_test_cases_helper(endpoint=endpoint, environment_code=environment_code, enabled=enabled)
 
 
 @app.post("/api/admin/test-cases")
 async def create_test_case(payload: TestCaseRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    timestamp = now_text()
-    with DB_LOCK:
-        with db_connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO ai_test_cases
-                (name, endpoint, environment_code, input_text, source, expected_json, enabled, tags, notes, created_at, updated_at, created_by, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    payload.name,
-                    payload.endpoint,
-                    payload.environment_code.upper() if payload.environment_code else None,
-                    payload.input_text,
-                    payload.source or "manual",
-                    safe_json(payload.expected_json),
-                    1 if payload.enabled else 0,
-                    payload.tags,
-                    payload.notes,
-                    timestamp,
-                    timestamp,
-                    user.user_id,
-                    user.user_id,
-                ),
-            )
-            conn.commit()
-            return {"status": "ok", "test_case_id": int(cursor.lastrowid)}
+    return create_test_case_helper(payload, user)
 
 
 @app.get("/api/admin/test-cases/{test_case_id}")
 async def get_test_case(test_case_id: int, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_test_cases WHERE id = ?", (test_case_id,))
-    if not row:
+    item = get_test_case_helper(test_case_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Test case not found")
-    item = dict(row)
-    item["expected_json"] = json.loads(item["expected_json"]) if item.get("expected_json") else None
     return item
 
 
 @app.patch("/api/admin/test-cases/{test_case_id}")
 async def patch_test_case(test_case_id: int, payload: TestCasePatchRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_test_cases WHERE id = ?", (test_case_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    endpoint = payload.endpoint if payload.endpoint is not None else row["endpoint"]
-    environment_code = payload.environment_code.upper() if payload.environment_code is not None and payload.environment_code else (None if payload.environment_code == "" else row["environment_code"])
-    db_execute(
-        """
-        UPDATE ai_test_cases
-        SET name = ?, endpoint = ?, environment_code = ?, input_text = ?, source = ?, expected_json = ?,
-            enabled = ?, tags = ?, notes = ?, updated_at = ?, updated_by = ?
-        WHERE id = ?
-        """,
-        (
-            payload.name if payload.name is not None else row["name"],
-            endpoint,
-            environment_code,
-            payload.input_text if payload.input_text is not None else row["input_text"],
-            payload.source if payload.source is not None else row["source"],
-            safe_json(payload.expected_json) if payload.expected_json is not None else row["expected_json"],
-            1 if (payload.enabled if payload.enabled is not None else bool(row["enabled"])) else 0,
-            payload.tags if payload.tags is not None else row["tags"],
-            payload.notes if payload.notes is not None else row["notes"],
-            now_text(),
-            user.user_id,
-            test_case_id,
-        ),
-    )
-    return {"status": "ok", "test_case_id": test_case_id}
+    return patch_test_case_helper(test_case_id, payload, user)
 
 
 @app.delete("/api/admin/test-cases/{test_case_id}")
 async def delete_test_case(test_case_id: int, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    db_execute("DELETE FROM ai_test_cases WHERE id = ?", (test_case_id,))
-    return {"status": "ok", "test_case_id": test_case_id}
-
-
-async def run_test_case_row(row: sqlite3.Row, prompt_id: int | None = None, environment_override: str | None = None) -> dict[str, Any]:
-    started_at = now_text()
-    started = parse_timestamp(started_at) or time.time()
-    endpoint = row["endpoint"]
-    environment_code = environment_override.upper() if environment_override else row["environment_code"]
-    prompt_row = prompt_row_for(endpoint, prompt_id) if endpoint in SUPPORTED_PROMPT_ENDPOINTS else None
-    try:
-        actual = await execute_ai_endpoint_for_test(endpoint, row["input_text"], environment_code, source="test_case", prompt_id=prompt_id)
-        comparison = compare_test_case_result(json.loads(row["expected_json"]) if row["expected_json"] else None, actual)
-        status = test_case_run_status(comparison)
-        if status == "passed" and isinstance(actual.get("ai_validation"), dict) and actual["ai_validation"].get("warnings"):
-            status = "warning"
-        error_message = None
-    except Exception as exc:
-        actual = {}
-        comparison = {"passed": False, "summary": str(exc), "field_results": [], "contract_result": {}, "environment_result": {}}
-        status = "error"
-        error_message = str(exc)
-    finished_at = now_text()
-    finished = parse_timestamp(finished_at) or time.time()
-    duration_ms = int(max(0, (finished - started) * 1000))
-    run_id = actual.get("run_id") if isinstance(actual, dict) else None
-    with DB_LOCK:
-        with db_connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO ai_test_case_runs
-                (test_case_id, run_id, endpoint, environment_code, prompt_id, prompt_version, status, started_at, finished_at, duration_ms, actual_json, comparison_json, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row["id"],
-                    run_id,
-                    endpoint,
-                    environment_code,
-                    prompt_row["id"] if prompt_row else None,
-                    prompt_row["version"] if prompt_row else None,
-                    status,
-                    started_at,
-                    finished_at,
-                    duration_ms,
-                    safe_json(actual),
-                    safe_json(comparison),
-                    error_message,
-                ),
-            )
-            conn.commit()
-            run_record_id = int(cursor.lastrowid)
-    return {"id": run_record_id, "test_case_id": row["id"], "run_id": run_id, "endpoint": endpoint, "environment_code": environment_code, "prompt_id": prompt_row["id"] if prompt_row else None, "prompt_version": prompt_row["version"] if prompt_row else None, "status": status, "duration_ms": duration_ms, "actual_json": actual, "comparison_json": comparison, "error_message": error_message}
-
-
-def suite_status_from_summary(summary: dict[str, Any]) -> str:
-    if summary["zero_error_required"] and summary["error"] > 0:
-        return "error"
-    if not summary["meets_pass_rate"]:
-        return "failed"
-    if summary["failed"] > 0:
-        return "failed"
-    if summary["warning"] > 0:
-        return "warning"
-    return "passed"
-
-
-def suite_summary_from_runs(runs: list[dict[str, Any]], suite: sqlite3.Row) -> dict[str, Any]:
-    total = len(runs)
-    summary: dict[str, Any] = {
-        "total": total,
-        "passed": 0,
-        "failed": 0,
-        "warning": 0,
-        "error": 0,
-        "pass_rate": 0.0,
-        "min_pass_rate": float(suite["min_pass_rate"]),
-        "meets_pass_rate": False,
-        "zero_error_required": bool(suite["zero_error_required"]),
-        "zero_error_met": True,
-        "status": "failed",
-    }
-    for run in runs:
-        status = run.get("status") or "error"
-        if status in {"passed", "failed", "warning", "error"}:
-            summary[status] += 1
-        else:
-            summary["error"] += 1
-    summary["pass_rate"] = round(summary["passed"] / total, 4) if total else 0.0
-    summary["meets_pass_rate"] = summary["pass_rate"] >= float(suite["min_pass_rate"])
-    summary["zero_error_met"] = summary["error"] == 0
-    summary["status"] = suite_status_from_summary(summary)
-    return summary
-
-
-async def run_test_suite_row(suite: sqlite3.Row, prompt_id: int | None = None, environment_override: str | None = None, user_id: int | None = None) -> dict[str, Any]:
-    suite_run_id = "suite_run_" + secrets.token_hex(8)
-    started_at = now_text()
-    started = parse_timestamp(started_at) or time.time()
-    endpoint = suite["endpoint"]
-    environment_code = environment_override.upper() if environment_override else suite["environment_code"]
-    prompt_row = prompt_row_for(endpoint, prompt_id) if endpoint in SUPPORTED_PROMPT_ENDPOINTS else None
-    case_rows = db_fetchall(
-        """
-        SELECT tc.*
-        FROM ai_test_suite_cases sc
-        JOIN ai_test_cases tc ON tc.id = sc.test_case_id
-        WHERE sc.suite_id = ? AND sc.enabled = 1 AND tc.enabled = 1
-        ORDER BY sc.sort_order, tc.id
-        """,
-        (suite["suite_id"],),
-    )
-    runs = []
-    for case in case_rows:
-        run = await run_test_case_row(case, prompt_id=prompt_id, environment_override=environment_code)
-        runs.append(run)
-        db_execute(
-            """
-            INSERT INTO ai_test_suite_run_cases
-            (suite_run_id, test_case_id, test_case_run_id, status, comparison_json)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (suite_run_id, case["id"], run.get("id"), run["status"], safe_json(run.get("comparison_json") or {})),
-        )
-    summary = suite_summary_from_runs(runs, suite)
-    finished_at = now_text()
-    finished = parse_timestamp(finished_at) or time.time()
-    duration_ms = int(max(0, (finished - started) * 1000))
-    db_execute(
-        """
-        INSERT INTO ai_test_suite_runs
-        (suite_run_id, suite_id, endpoint, environment_code, prompt_id, prompt_version, status,
-         started_at, finished_at, duration_ms, summary_json, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            suite_run_id,
-            suite["suite_id"],
-            endpoint,
-            environment_code,
-            prompt_row["id"] if prompt_row else None,
-            prompt_row["version"] if prompt_row else None,
-            summary["status"],
-            started_at,
-            finished_at,
-            duration_ms,
-            safe_json(summary),
-            user_id,
-        ),
-    )
-    return {
-        "suite_run_id": suite_run_id,
-        "suite_id": suite["suite_id"],
-        "suite_name": suite["name"],
-        "endpoint": endpoint,
-        "environment_code": environment_code,
-        "prompt_id": prompt_row["id"] if prompt_row else None,
-        "prompt_version": prompt_row["version"] if prompt_row else None,
-        "status": summary["status"],
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "duration_ms": duration_ms,
-        "summary": summary,
-        "runs": runs,
-    }
-
-
-def suite_row_or_404(suite_id: str) -> sqlite3.Row:
-    row = db_fetchone("SELECT * FROM ai_test_suites WHERE suite_id = ?", (suite_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Test suite not found")
-    return row
-
-
-def status_is_passing(status: str | None) -> bool:
-    return status in {"passed", "warning"}
-
-
-def classify_prompt_comparison_result(baseline_status: str, candidate_status: str) -> str:
-    if baseline_status == "error" or candidate_status == "error":
-        return "error"
-    baseline_passed = status_is_passing(baseline_status)
-    candidate_passed = status_is_passing(candidate_status)
-    if not baseline_passed and candidate_passed:
-        return "improved"
-    if baseline_passed and not candidate_passed:
-        return "regressed"
-    if baseline_passed and candidate_passed:
-        return "unchanged_pass"
-    return "unchanged_fail"
-
-
-def prompt_comparison_field_differences(baseline: dict[str, Any], candidate: dict[str, Any]) -> list[dict[str, Any]]:
-    fields = ["summary", "building", "room", "priority", "work_order_type", "assign_to", "issue_to", "job_type"]
-    differences = []
-    for field in fields:
-        baseline_value = extract_result_value(baseline, field)
-        candidate_value = extract_result_value(candidate, field)
-        if baseline_value != candidate_value:
-            differences.append({"field": field, "baseline": baseline_value, "candidate": candidate_value})
-    baseline_contract = baseline.get("contract", {}).get("valid") if isinstance(baseline.get("contract"), dict) else None
-    candidate_contract = candidate.get("contract", {}).get("valid") if isinstance(candidate.get("contract"), dict) else None
-    if baseline_contract != candidate_contract:
-        differences.append({"field": "contract_valid", "baseline": baseline_contract, "candidate": candidate_contract})
-    baseline_env = baseline.get("ai_validation", {}).get("valid") if isinstance(baseline.get("ai_validation"), dict) else None
-    candidate_env = candidate.get("ai_validation", {}).get("valid") if isinstance(candidate.get("ai_validation"), dict) else None
-    if baseline_env != candidate_env:
-        differences.append({"field": "environment_valid", "baseline": baseline_env, "candidate": candidate_env})
-    return differences
-
-
-def prompt_comparison_case_json(test_case: sqlite3.Row, baseline: dict[str, Any], candidate: dict[str, Any], result: str) -> dict[str, Any]:
-    return {
-        "test_case_id": test_case["id"],
-        "test_case_name": test_case["name"],
-        "baseline": {
-            "prompt_id": baseline.get("prompt_id"),
-            "prompt_version": baseline.get("prompt_version"),
-            "status": baseline.get("status"),
-            "run_id": baseline.get("run_id"),
-            "duration_ms": baseline.get("duration_ms"),
-        },
-        "candidate": {
-            "prompt_id": candidate.get("prompt_id"),
-            "prompt_version": candidate.get("prompt_version"),
-            "status": candidate.get("status"),
-            "run_id": candidate.get("run_id"),
-            "duration_ms": candidate.get("duration_ms"),
-        },
-        "result": result,
-        "field_differences": prompt_comparison_field_differences(baseline.get("actual_json") or {}, candidate.get("actual_json") or {}),
-    }
-
-
-def prompt_comparison_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
-    summary: dict[str, Any] = {
-        "total": len(cases),
-        "baseline_passed": 0,
-        "candidate_passed": 0,
-        "improved": 0,
-        "regressed": 0,
-        "unchanged_pass": 0,
-        "unchanged_fail": 0,
-        "error": 0,
-        "baseline_avg_duration_ms": 0,
-        "candidate_avg_duration_ms": 0,
-    }
-    baseline_durations = []
-    candidate_durations = []
-    for case in cases:
-        baseline = case.get("baseline", {})
-        candidate = case.get("candidate", {})
-        if status_is_passing(baseline.get("status")):
-            summary["baseline_passed"] += 1
-        if status_is_passing(candidate.get("status")):
-            summary["candidate_passed"] += 1
-        result = case.get("result")
-        if result in {"improved", "regressed", "unchanged_pass", "unchanged_fail", "error"}:
-            summary[result] += 1
-        if isinstance(baseline.get("duration_ms"), int):
-            baseline_durations.append(baseline["duration_ms"])
-        if isinstance(candidate.get("duration_ms"), int):
-            candidate_durations.append(candidate["duration_ms"])
-    if baseline_durations:
-        summary["baseline_avg_duration_ms"] = round(sum(baseline_durations) / len(baseline_durations), 1)
-    if candidate_durations:
-        summary["candidate_avg_duration_ms"] = round(sum(candidate_durations) / len(candidate_durations), 1)
-    return summary
-
-
-def active_prompt_for_endpoint(endpoint: str) -> sqlite3.Row | None:
-    return db_fetchone("SELECT * FROM ai_prompt_versions WHERE endpoint = ? AND status = 'active'", (endpoint,))
-
-
-def required_suite_readiness(endpoint: str, candidate_prompt_id: int, environment_code: str | None = None) -> dict[str, Any]:
-    filters = ["endpoint = ?", "enabled = 1", "required_for_promotion = 1"]
-    params: list[Any] = [endpoint]
-    if environment_code:
-        filters.append("(environment_code IS NULL OR environment_code = ?)")
-        params.append(environment_code)
-    rows = db_fetchall(f"SELECT * FROM ai_test_suites WHERE {' AND '.join(filters)} ORDER BY name", tuple(params))
-    failures = []
-    suites = []
-    for suite in rows:
-        run = db_fetchone(
-            """
-            SELECT * FROM ai_test_suite_runs
-            WHERE suite_id = ? AND prompt_id = ?
-            ORDER BY id DESC LIMIT 1
-            """,
-            (suite["suite_id"], candidate_prompt_id),
-        )
-        run_summary = json.loads(run["summary_json"]) if run and run["summary_json"] else None
-        status = run["status"] if run else "missing"
-        item = {
-            "suite_id": suite["suite_id"],
-            "name": suite["name"],
-            "environment_code": suite["environment_code"],
-            "latest_run_id": run["suite_run_id"] if run else None,
-            "status": status,
-            "summary": run_summary,
-        }
-        suites.append(item)
-        if not run:
-            failures.append({"suite_id": suite["suite_id"], "name": suite["name"], "reason": "No suite run found for candidate prompt."})
-        elif run["status"] not in {"passed", "warning"}:
-            failures.append({"suite_id": suite["suite_id"], "name": suite["name"], "reason": f"Latest suite run status is {run['status']}."})
-    return {
-        "required_suites_found": bool(rows),
-        "required_suites_passed": not failures,
-        "suite_failures": failures,
-        "suites": suites,
-    }
-
-
-def check_prompt_promotion_gate(prompt_id: int, comparison_id: str | None = None) -> dict[str, Any]:
-    candidate = prompt_version_by_id(prompt_id)
-    reasons: list[str] = []
-    summary: dict[str, Any] = {}
-    comparison_row: sqlite3.Row | None = None
-    active = None
-    suite_readiness = {"required_suites_found": False, "required_suites_passed": True, "suite_failures": [], "suites": []}
-
-    if not candidate:
-        return {"allowed": False, "gate_status": "blocked", "reasons": ["Candidate prompt was not found."], "summary": summary, "comparison_id": comparison_id}
-    if candidate["status"] == "archived":
-        reasons.append("Archived prompts cannot be activated.")
-    if candidate["status"] not in {"draft", "active"}:
-        reasons.append("Candidate prompt is not eligible for activation.")
-
-    active = active_prompt_for_endpoint(candidate["endpoint"])
-    if not active:
-        reasons.append(f"No current active prompt exists for endpoint {candidate['endpoint']}.")
-
-    if not comparison_id:
-        reasons.append("A completed prompt comparison is required for promotion.")
-    else:
-        comparison_row = db_fetchone("SELECT * FROM ai_prompt_comparisons WHERE comparison_id = ?", (comparison_id,))
-        if not comparison_row:
-            reasons.append("Prompt comparison was not found.")
-        else:
-            try:
-                summary = json.loads(comparison_row["summary_json"]) if comparison_row["summary_json"] else {}
-            except json.JSONDecodeError:
-                summary = {}
-                reasons.append("Prompt comparison summary JSON is invalid.")
-            if comparison_row["endpoint"] != candidate["endpoint"]:
-                reasons.append("Prompt comparison endpoint does not match the candidate prompt endpoint.")
-            if active and comparison_row["baseline_prompt_id"] != active["id"]:
-                reasons.append("Prompt comparison baseline is not the current active prompt.")
-            if comparison_row["candidate_prompt_id"] != candidate["id"]:
-                reasons.append("Prompt comparison candidate does not match this prompt.")
-            if comparison_row["status"] != "completed":
-                reasons.append("Prompt comparison is not completed.")
-            if int(summary.get("regressed") or 0) != 0:
-                reasons.append("Prompt comparison has regressions.")
-            if int(summary.get("error") or 0) != 0:
-                reasons.append("Prompt comparison has errors.")
-            if int(summary.get("candidate_passed") or 0) < int(summary.get("baseline_passed") or 0):
-                reasons.append("Candidate passed fewer test cases than the current active baseline.")
-            suite_readiness = required_suite_readiness(candidate["endpoint"], candidate["id"], comparison_row["environment_code"])
-            if suite_readiness["required_suites_found"] and not suite_readiness["required_suites_passed"]:
-                reasons.append("One or more required test suites have not passed for the candidate prompt.")
-
-    allowed = not reasons
-    return {
-        "allowed": allowed,
-        "gate_status": "passed" if allowed else "blocked",
-        "reasons": reasons,
-        "summary": summary,
-        "comparison_id": comparison_id,
-        "suite_readiness": suite_readiness,
-    }
-
-
-def record_prompt_promotion(
-    endpoint: str,
-    previous_prompt_id: int | None,
-    promoted_prompt_id: int,
-    comparison_id: str | None,
-    gate_status: str,
-    override_used: bool,
-    override_reason: str | None,
-    promoted_by: int | None,
-    summary: dict[str, Any] | None,
-) -> str:
-    promotion_id = "promo_" + secrets.token_hex(8)
-    db_execute(
-        """
-        INSERT INTO ai_prompt_promotions
-        (promotion_id, endpoint, previous_prompt_id, promoted_prompt_id, comparison_id, gate_status,
-         override_used, override_reason, promoted_by, promoted_at, summary_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            promotion_id,
-            endpoint,
-            previous_prompt_id,
-            promoted_prompt_id,
-            comparison_id,
-            gate_status,
-            1 if override_used else 0,
-            override_reason,
-            promoted_by,
-            now_text(),
-            safe_json(summary or {}),
-        ),
-    )
-    return promotion_id
-
-
-async def run_prompt_comparison(payload: PromptComparisonRequest, user: PortalUser) -> dict[str, Any]:
-    baseline_prompt = prompt_version_by_id(payload.baseline_prompt_id)
-    candidate_prompt = prompt_version_by_id(payload.candidate_prompt_id)
-    if not baseline_prompt or not candidate_prompt:
-        raise HTTPException(status_code=404, detail="Baseline or candidate prompt was not found")
-    if baseline_prompt["endpoint"] != payload.endpoint or candidate_prompt["endpoint"] != payload.endpoint:
-        raise HTTPException(status_code=400, detail="Both prompt versions must match the requested endpoint")
-    comparison_id = "cmp_" + secrets.token_hex(8)
-    started_at = now_text()
-    started = parse_timestamp(started_at) or time.time()
-    environment_code = payload.environment_code.upper() if payload.environment_code else None
-    db_execute(
-        """
-        INSERT INTO ai_prompt_comparisons
-        (comparison_id, endpoint, environment_code, baseline_prompt_id, candidate_prompt_id, status, started_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (comparison_id, payload.endpoint, environment_code, payload.baseline_prompt_id, payload.candidate_prompt_id, "running", started_at, user.user_id),
-    )
-    filters = ["endpoint = ?"]
-    params: list[Any] = [payload.endpoint]
-    if environment_code:
-        filters.append("environment_code = ?")
-        params.append(environment_code)
-    if payload.enabled_only:
-        filters.append("enabled = 1")
-    rows = db_fetchall(f"SELECT * FROM ai_test_cases WHERE {' AND '.join(filters)} ORDER BY id", tuple(params))
-    case_jsons = []
-    for row in rows:
-        baseline_run = await run_test_case_row(row, prompt_id=payload.baseline_prompt_id, environment_override=environment_code)
-        candidate_run = await run_test_case_row(row, prompt_id=payload.candidate_prompt_id, environment_override=environment_code)
-        result = classify_prompt_comparison_result(baseline_run["status"], candidate_run["status"])
-        case_json = prompt_comparison_case_json(row, baseline_run, candidate_run, result)
-        case_jsons.append(case_json)
-        db_execute(
-            """
-            INSERT INTO ai_prompt_comparison_cases
-            (comparison_id, test_case_id, baseline_run_id, candidate_run_id, baseline_status, candidate_status, result, comparison_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                comparison_id,
-                row["id"],
-                baseline_run.get("run_id"),
-                candidate_run.get("run_id"),
-                baseline_run["status"],
-                candidate_run["status"],
-                result,
-                safe_json(case_json),
-            ),
-        )
-    summary = prompt_comparison_summary(case_jsons)
-    finished_at = now_text()
-    finished = parse_timestamp(finished_at) or time.time()
-    duration_ms = int(max(0, (finished - started) * 1000))
-    status = "completed"
-    db_execute(
-        """
-        UPDATE ai_prompt_comparisons
-        SET status = ?, finished_at = ?, duration_ms = ?, summary_json = ?
-        WHERE comparison_id = ?
-        """,
-        (status, finished_at, duration_ms, safe_json(summary), comparison_id),
-    )
-    return {
-        "comparison_id": comparison_id,
-        "endpoint": payload.endpoint,
-        "environment_code": environment_code,
-        "baseline_prompt_id": payload.baseline_prompt_id,
-        "candidate_prompt_id": payload.candidate_prompt_id,
-        "status": status,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "duration_ms": duration_ms,
-        "summary": summary,
-        "cases": case_jsons,
-    }
+    return delete_test_case_helper(test_case_id)
 
 
 @app.post("/api/admin/test-cases/{test_case_id}/run")
 async def run_test_case(test_case_id: int, payload: TestCaseRunRequest | None = None, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_test_cases WHERE id = ?", (test_case_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    return await run_test_case_row(row, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None)
+    return await run_test_case_helper(test_case_id, payload, **test_case_runner_kwargs())
 
 
 @app.post("/api/admin/test-cases/run-batch")
 async def run_test_case_batch(payload: TestCaseBatchRunRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    filters = []
-    params: list[Any] = []
-    if payload.endpoint:
-        filters.append("endpoint = ?")
-        params.append(payload.endpoint)
-    if payload.environment_code:
-        filters.append("environment_code = ?")
-        params.append(payload.environment_code.upper())
-    if payload.enabled_only:
-        filters.append("enabled = 1")
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    rows = db_fetchall(f"SELECT * FROM ai_test_cases {where} ORDER BY id", tuple(params))
-    runs = [await run_test_case_row(row, prompt_id=payload.prompt_id) for row in rows]
-    summary = {"total": len(runs), "passed": 0, "failed": 0, "warning": 0, "error": 0, "runs": runs}
-    for run in runs:
-        summary[run["status"]] = summary.get(run["status"], 0) + 1
-    return summary
+    return await run_test_case_batch_helper(payload, **test_case_runner_kwargs())
 
 
 @app.get("/api/admin/test-case-runs")
 async def list_test_case_runs(status: str | None = None, limit: int = 50, user: PortalUser = Depends(current_admin)) -> list[dict[str, Any]]:
-    where = "WHERE r.status = ?" if status else ""
-    params: list[Any] = [status] if status else []
-    params.append(max(1, min(int(limit or 50), 200)))
-    rows = db_fetchall(
-        f"""
-        SELECT r.*, c.name AS test_case_name
-        FROM ai_test_case_runs r
-        LEFT JOIN ai_test_cases c ON c.id = r.test_case_id
-        {where}
-        ORDER BY r.id DESC LIMIT ?
-        """,
-        tuple(params),
-    )
-    return [dict(row) for row in rows]
+    return list_test_case_runs_helper(status=status, limit=limit)
 
 
 @app.get("/api/admin/test-case-runs/{run_id}")
 async def get_test_case_run(run_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_test_case_runs WHERE run_id = ? OR id = ?", (run_id, run_id if str(run_id).isdigit() else -1))
-    if not row:
+    item = get_test_case_run_helper(run_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Test case run not found")
-    item = dict(row)
-    item["actual_json"] = json.loads(item["actual_json"]) if item.get("actual_json") else None
-    item["comparison_json"] = json.loads(item["comparison_json"]) if item.get("comparison_json") else None
     return item
 
 
@@ -5375,224 +4768,60 @@ async def list_test_suites(
     required_for_promotion: bool | None = None,
     user: PortalUser = Depends(current_admin),
 ) -> list[dict[str, Any]]:
-    filters = []
-    params: list[Any] = []
-    if endpoint:
-        filters.append("endpoint = ?")
-        params.append(endpoint)
-    if environment_code:
-        filters.append("environment_code = ?")
-        params.append(environment_code.upper())
-    if enabled is not None:
-        filters.append("enabled = ?")
-        params.append(1 if enabled else 0)
-    if required_for_promotion is not None:
-        filters.append("required_for_promotion = ?")
-        params.append(1 if required_for_promotion else 0)
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    rows = db_fetchall(f"SELECT * FROM ai_test_suites {where} ORDER BY updated_at DESC, id DESC", tuple(params))
-    return [dict(row) for row in rows]
+    return list_test_suites_helper(endpoint=endpoint, environment_code=environment_code, enabled=enabled, required_for_promotion=required_for_promotion)
 
 
 @app.post("/api/admin/test-suites")
 async def create_test_suite(payload: TestSuiteRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    timestamp = now_text()
-    suite_id = "suite_" + secrets.token_hex(6)
-    db_execute(
-        """
-        INSERT INTO ai_test_suites
-        (suite_id, name, endpoint, environment_code, description, enabled, required_for_promotion,
-         min_pass_rate, zero_regression_required, zero_error_required, tags, created_at, updated_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            suite_id,
-            payload.name,
-            payload.endpoint,
-            payload.environment_code.upper() if payload.environment_code else None,
-            payload.description,
-            1 if payload.enabled else 0,
-            1 if payload.required_for_promotion else 0,
-            payload.min_pass_rate,
-            1 if payload.zero_regression_required else 0,
-            1 if payload.zero_error_required else 0,
-            payload.tags,
-            timestamp,
-            timestamp,
-            user.user_id,
-            user.user_id,
-        ),
-    )
-    return {"status": "ok", "suite_id": suite_id}
+    return create_test_suite_helper(payload, user)
 
 
 @app.post("/api/admin/test-suites/run-batch")
 async def run_test_suite_batch(payload: TestSuiteBatchRunRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    filters = []
-    params: list[Any] = []
-    if payload.endpoint:
-        filters.append("endpoint = ?")
-        params.append(payload.endpoint)
-    if payload.environment_code:
-        filters.append("environment_code = ?")
-        params.append(payload.environment_code.upper())
-    if payload.required_only:
-        filters.append("required_for_promotion = 1")
-    if payload.enabled_only:
-        filters.append("enabled = 1")
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    rows = db_fetchall(f"SELECT * FROM ai_test_suites {where} ORDER BY id", tuple(params))
-    runs = [await run_test_suite_row(row, prompt_id=payload.prompt_id, environment_override=payload.environment_code, user_id=user.user_id) for row in rows]
-    summary: dict[str, Any] = {"total_suites": len(runs), "passed": 0, "failed": 0, "warning": 0, "error": 0, "runs": runs}
-    for run in runs:
-        status = run["status"]
-        summary[status] = summary.get(status, 0) + 1
-    return summary
+    return await run_test_suite_batch_helper(payload, user, **test_suite_runner_kwargs())
 
 
 @app.get("/api/admin/test-suite-runs")
 async def list_test_suite_runs(status: str | None = None, limit: int = 50, user: PortalUser = Depends(current_admin)) -> list[dict[str, Any]]:
-    where = "WHERE r.status = ?" if status else ""
-    params: list[Any] = [status] if status else []
-    params.append(max(1, min(int(limit or 50), 200)))
-    rows = db_fetchall(
-        f"""
-        SELECT r.*, s.name AS suite_name
-        FROM ai_test_suite_runs r
-        LEFT JOIN ai_test_suites s ON s.suite_id = r.suite_id
-        {where}
-        ORDER BY r.id DESC LIMIT ?
-        """,
-        tuple(params),
-    )
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
-        result.append(item)
-    return result
+    return list_test_suite_runs_helper(status=status, limit=limit)
 
 
 @app.get("/api/admin/test-suite-runs/{suite_run_id}")
 async def get_test_suite_run(suite_run_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone(
-        """
-        SELECT r.*, s.name AS suite_name
-        FROM ai_test_suite_runs r
-        LEFT JOIN ai_test_suites s ON s.suite_id = r.suite_id
-        WHERE r.suite_run_id = ?
-        """,
-        (suite_run_id,),
-    )
-    if not row:
+    item = get_test_suite_run_helper(suite_run_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Test suite run not found")
-    cases = db_fetchall(
-        """
-        SELECT rc.*, tc.name AS test_case_name, tcr.run_id AS workflow_run_id
-        FROM ai_test_suite_run_cases rc
-        LEFT JOIN ai_test_cases tc ON tc.id = rc.test_case_id
-        LEFT JOIN ai_test_case_runs tcr ON tcr.id = rc.test_case_run_id
-        WHERE rc.suite_run_id = ?
-        ORDER BY rc.id
-        """,
-        (suite_run_id,),
-    )
-    item = dict(row)
-    item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
-    item["cases"] = []
-    for case in cases:
-        case_item = dict(case)
-        case_item["comparison_json"] = json.loads(case_item["comparison_json"]) if case_item.get("comparison_json") else None
-        item["cases"].append(case_item)
     return item
 
 
 @app.get("/api/admin/test-suites/{suite_id}")
 async def get_test_suite(suite_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = suite_row_or_404(suite_id)
-    cases = db_fetchall(
-        """
-        SELECT sc.*, tc.name, tc.endpoint, tc.environment_code, tc.input_text, tc.enabled AS test_case_enabled
-        FROM ai_test_suite_cases sc
-        JOIN ai_test_cases tc ON tc.id = sc.test_case_id
-        WHERE sc.suite_id = ?
-        ORDER BY sc.sort_order, tc.id
-        """,
-        (suite_id,),
-    )
-    item = dict(row)
-    item["cases"] = [dict(case) for case in cases]
-    return item
+    return get_test_suite_helper(suite_id)
 
 
 @app.patch("/api/admin/test-suites/{suite_id}")
 async def patch_test_suite(suite_id: str, payload: TestSuitePatchRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = suite_row_or_404(suite_id)
-    environment_code = payload.environment_code.upper() if payload.environment_code is not None and payload.environment_code else (None if payload.environment_code == "" else row["environment_code"])
-    db_execute(
-        """
-        UPDATE ai_test_suites
-        SET name = ?, endpoint = ?, environment_code = ?, description = ?, enabled = ?, required_for_promotion = ?,
-            min_pass_rate = ?, zero_regression_required = ?, zero_error_required = ?, tags = ?, updated_at = ?, updated_by = ?
-        WHERE suite_id = ?
-        """,
-        (
-            payload.name if payload.name is not None else row["name"],
-            payload.endpoint if payload.endpoint is not None else row["endpoint"],
-            environment_code,
-            payload.description if payload.description is not None else row["description"],
-            1 if (payload.enabled if payload.enabled is not None else bool(row["enabled"])) else 0,
-            1 if (payload.required_for_promotion if payload.required_for_promotion is not None else bool(row["required_for_promotion"])) else 0,
-            payload.min_pass_rate if payload.min_pass_rate is not None else row["min_pass_rate"],
-            1 if (payload.zero_regression_required if payload.zero_regression_required is not None else bool(row["zero_regression_required"])) else 0,
-            1 if (payload.zero_error_required if payload.zero_error_required is not None else bool(row["zero_error_required"])) else 0,
-            payload.tags if payload.tags is not None else row["tags"],
-            now_text(),
-            user.user_id,
-            suite_id,
-        ),
-    )
-    return {"status": "ok", "suite_id": suite_id}
+    return patch_test_suite_helper(suite_id, payload, user)
 
 
 @app.delete("/api/admin/test-suites/{suite_id}")
 async def delete_test_suite(suite_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    suite_row_or_404(suite_id)
-    db_execute("DELETE FROM ai_test_suite_cases WHERE suite_id = ?", (suite_id,))
-    db_execute("DELETE FROM ai_test_suites WHERE suite_id = ?", (suite_id,))
-    return {"status": "ok", "suite_id": suite_id}
+    return delete_test_suite_helper(suite_id)
 
 
 @app.post("/api/admin/test-suites/{suite_id}/cases")
 async def add_test_suite_case(suite_id: str, payload: TestSuiteCaseRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    suite_row_or_404(suite_id)
-    case = db_fetchone("SELECT id FROM ai_test_cases WHERE id = ?", (payload.test_case_id,))
-    if not case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    try:
-        db_execute(
-            """
-            INSERT INTO ai_test_suite_cases (suite_id, test_case_id, sort_order, enabled)
-            VALUES (?, ?, ?, ?)
-            """,
-            (suite_id, payload.test_case_id, payload.sort_order, 1 if payload.enabled else 0),
-        )
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(status_code=409, detail="Test case is already in this suite") from exc
-    return {"status": "ok", "suite_id": suite_id, "test_case_id": payload.test_case_id}
+    return add_test_suite_case_helper(suite_id, payload)
 
 
 @app.delete("/api/admin/test-suites/{suite_id}/cases/{test_case_id}")
 async def remove_test_suite_case(suite_id: str, test_case_id: int, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    suite_row_or_404(suite_id)
-    db_execute("DELETE FROM ai_test_suite_cases WHERE suite_id = ? AND test_case_id = ?", (suite_id, test_case_id))
-    return {"status": "ok", "suite_id": suite_id, "test_case_id": test_case_id}
+    return remove_test_suite_case_helper(suite_id, test_case_id)
 
 
 @app.post("/api/admin/test-suites/{suite_id}/run")
 async def run_test_suite(suite_id: str, payload: TestSuiteRunRequest | None = None, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    suite = suite_row_or_404(suite_id)
-    return await run_test_suite_row(suite, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None, user_id=user.user_id)
+    return await run_test_suite_helper(suite_id, payload, user, **test_suite_runner_kwargs())
 
 
 @app.get("/api/admin/regression-dashboard")
@@ -5602,7 +4831,12 @@ async def regression_dashboard(user: PortalUser = Depends(current_admin)) -> dic
 
 @app.post("/api/admin/prompt-comparisons")
 async def create_prompt_comparison(payload: PromptComparisonRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    return await run_prompt_comparison(payload, user)
+    return await run_prompt_comparison_helper(
+        payload,
+        user,
+        prompt_version_by_id=prompt_version_by_id,
+        run_test_case_row=run_test_case_row_for_prompt_comparison,
+    )
 
 
 @app.get("/api/admin/prompt-comparisons")
@@ -5612,66 +4846,14 @@ async def list_prompt_comparisons(
     limit: int = 50,
     user: PortalUser = Depends(current_admin),
 ) -> list[dict[str, Any]]:
-    filters = []
-    params: list[Any] = []
-    if endpoint:
-        filters.append("c.endpoint = ?")
-        params.append(endpoint)
-    if status:
-        filters.append("c.status = ?")
-        params.append(status)
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    params.append(max(1, min(int(limit or 50), 200)))
-    rows = db_fetchall(
-        f"""
-        SELECT c.*, bp.version AS baseline_version, cp.version AS candidate_version
-        FROM ai_prompt_comparisons c
-        LEFT JOIN ai_prompt_versions bp ON bp.id = c.baseline_prompt_id
-        LEFT JOIN ai_prompt_versions cp ON cp.id = c.candidate_prompt_id
-        {where}
-        ORDER BY c.id DESC LIMIT ?
-        """,
-        tuple(params),
-    )
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
-        result.append(item)
-    return result
+    return list_prompt_comparisons_helper(endpoint=endpoint, status=status, limit=limit)
 
 
 @app.get("/api/admin/prompt-comparisons/{comparison_id}")
 async def get_prompt_comparison(comparison_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone(
-        """
-        SELECT c.*, bp.version AS baseline_version, cp.version AS candidate_version
-        FROM ai_prompt_comparisons c
-        LEFT JOIN ai_prompt_versions bp ON bp.id = c.baseline_prompt_id
-        LEFT JOIN ai_prompt_versions cp ON cp.id = c.candidate_prompt_id
-        WHERE c.comparison_id = ?
-        """,
-        (comparison_id,),
-    )
-    if not row:
+    item = get_prompt_comparison_helper(comparison_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Prompt comparison not found")
-    cases = db_fetchall(
-        """
-        SELECT pc.*, tc.name AS test_case_name
-        FROM ai_prompt_comparison_cases pc
-        LEFT JOIN ai_test_cases tc ON tc.id = pc.test_case_id
-        WHERE pc.comparison_id = ?
-        ORDER BY pc.id
-        """,
-        (comparison_id,),
-    )
-    item = dict(row)
-    item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
-    item["cases"] = []
-    for case in cases:
-        case_item = dict(case)
-        case_item["comparison_json"] = json.loads(case_item["comparison_json"]) if case_item.get("comparison_json") else None
-        item["cases"].append(case_item)
     return item
 
 
@@ -5681,50 +4863,14 @@ async def list_prompt_promotions(
     limit: int = 50,
     user: PortalUser = Depends(current_admin),
 ) -> list[dict[str, Any]]:
-    filters = []
-    params: list[Any] = []
-    if endpoint:
-        filters.append("p.endpoint = ?")
-        params.append(endpoint)
-    where = f"WHERE {' AND '.join(filters)}" if filters else ""
-    params.append(max(1, min(int(limit or 50), 200)))
-    rows = db_fetchall(
-        f"""
-        SELECT p.*, prev.version AS previous_version, promoted.version AS promoted_version, u.username AS promoted_by_username
-        FROM ai_prompt_promotions p
-        LEFT JOIN ai_prompt_versions prev ON prev.id = p.previous_prompt_id
-        LEFT JOIN ai_prompt_versions promoted ON promoted.id = p.promoted_prompt_id
-        LEFT JOIN users u ON u.user_id = p.promoted_by
-        {where}
-        ORDER BY p.id DESC LIMIT ?
-        """,
-        tuple(params),
-    )
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
-        result.append(item)
-    return result
+    return list_prompt_promotions_helper(endpoint=endpoint, limit=limit)
 
 
 @app.get("/api/admin/prompt-promotions/{promotion_id}")
 async def get_prompt_promotion(promotion_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone(
-        """
-        SELECT p.*, prev.version AS previous_version, promoted.version AS promoted_version, u.username AS promoted_by_username
-        FROM ai_prompt_promotions p
-        LEFT JOIN ai_prompt_versions prev ON prev.id = p.previous_prompt_id
-        LEFT JOIN ai_prompt_versions promoted ON promoted.id = p.promoted_prompt_id
-        LEFT JOIN users u ON u.user_id = p.promoted_by
-        WHERE p.promotion_id = ?
-        """,
-        (promotion_id,),
-    )
-    if not row:
+    item = get_prompt_promotion_helper(promotion_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Prompt promotion not found")
-    item = dict(row)
-    item["summary_json"] = json.loads(item["summary_json"]) if item.get("summary_json") else None
     return item
 
 
@@ -5795,61 +4941,12 @@ async def create_test_case_from_workflow_run(
     payload: WorkflowRunCreateTestCaseRequest,
     user: PortalUser = Depends(current_admin),
 ) -> dict[str, Any]:
-    row = db_fetchone(
-        """
-        SELECT c.*, r.actual_json
-        FROM ai_test_case_runs r
-        JOIN ai_test_cases c ON c.id = r.test_case_id
-        WHERE r.run_id = ?
-        ORDER BY r.id DESC LIMIT 1
-        """,
-        (run_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=400, detail="This workflow run cannot create a test case because the original input text was not stored.")
-    expected_json = payload.expected_json
-    if expected_json is None and row["actual_json"]:
-        try:
-            actual = json.loads(row["actual_json"])
-            expected_json = {
-                "building": extract_result_value(actual, "building"),
-                "room": extract_result_value(actual, "room"),
-                "priority": extract_result_value(actual, "priority"),
-                "work_order_type": extract_result_value(actual, "work_order_type"),
-                "contract_valid": actual.get("contract", {}).get("valid") if isinstance(actual.get("contract"), dict) else None,
-                "environment_valid": actual.get("ai_validation", {}).get("valid") if isinstance(actual.get("ai_validation"), dict) else None,
-            }
-        except json.JSONDecodeError:
-            expected_json = None
-    request_payload = TestCaseRequest(
-        name=payload.name,
-        endpoint=row["endpoint"],
-        environment_code=row["environment_code"],
-        input_text=row["input_text"],
-        source="workflow_run",
-        expected_json=expected_json,
-        enabled=True,
-        tags=payload.tags,
-        notes=payload.notes,
-    )
-    return await create_test_case(request_payload, user)
+    return await create_test_case_from_workflow_run_helper(run_id, payload, user)
 
 
 @app.post("/api/admin/workflow-runs/{run_id}/replay")
 async def replay_workflow_run(run_id: str, payload: TestCaseRunRequest | None = None, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone(
-        """
-        SELECT c.*
-        FROM ai_test_case_runs r
-        JOIN ai_test_cases c ON c.id = r.test_case_id
-        WHERE r.run_id = ?
-        ORDER BY r.id DESC LIMIT 1
-        """,
-        (run_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=400, detail="This workflow run cannot be replayed because the original input text was not stored.")
-    return await run_test_case_row(row, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None)
+    return await replay_workflow_run_helper(run_id, payload, **test_case_runner_kwargs())
 
 
 @app.get("/api/admin/reports/usage")

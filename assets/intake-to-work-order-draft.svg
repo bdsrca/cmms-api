@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+<defs>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.10"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/></marker>
+<linearGradient id="soft" x1="0" x2="1"><stop offset="0" stop-color="#eff6ff"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+</defs>
+<rect x="0" y="0" width="1400" height="900" fill="#f8fafc"/>
+<circle cx="1270" cy="80" r="190" fill="#dbeafe" opacity="0.38"/>
+<circle cx="80" cy="820" r="160" fill="#e0f2fe" opacity="0.45"/>
+<text x="56" y="72" font-size="36" fill="#0f172a" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">Intake to Work-Order Draft</text>
+<text x="58" y="108" font-size="17" fill="#64748b" font-family="Inter, Segoe UI, Arial, sans-serif">Plain language becomes a validated draft, not an automatic transaction</text>
+<rect x="75" y="170" width="220" height="190" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="1.4" filter="url(#shadow)"/>
+<circle cx="105" cy="202" r="16" fill="#0891b2"/>
+<text x="105" y="208" font-size="15" fill="white" text-anchor="middle" font-weight="700" font-family="Inter, Segoe UI, Arial, sans-serif">1</text>
+<rect x="133" y="192" width="42" height="5" rx="3" fill="#0891b2"/>
+<text x="133" y="222" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Text / transcript /</text>
+<text x="133" y="244" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">screenshot</text>
+<text x="99" y="266" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">User describes the issue.</text>
+<line x1="295" y1="265" x2="322" y2="265" stroke="#2563eb" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="335" y="170" width="220" height="190" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="1.4" filter="url(#shadow)"/>
+<circle cx="365" cy="202" r="16" fill="#7c3aed"/>
+<text x="365" y="208" font-size="15" fill="white" text-anchor="middle" font-weight="700" font-family="Inter, Segoe UI, Arial, sans-serif">2</text>
+<rect x="393" y="192" width="42" height="5" rx="3" fill="#7c3aed"/>
+<text x="393" y="222" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">AI extraction</text>
+<text x="359" y="266" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Draft fields are proposed.</text>
+<line x1="555" y1="265" x2="582" y2="265" stroke="#2563eb" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="595" y="170" width="220" height="190" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="1.4" filter="url(#shadow)"/>
+<circle cx="625" cy="202" r="16" fill="#2563eb"/>
+<text x="625" y="208" font-size="15" fill="white" text-anchor="middle" font-weight="700" font-family="Inter, Segoe UI, Arial, sans-serif">3</text>
+<rect x="653" y="192" width="42" height="5" rx="3" fill="#2563eb"/>
+<text x="653" y="222" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Contract check</text>
+<text x="619" y="266" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">JSON shape is verified.</text>
+<line x1="815" y1="265" x2="842" y2="265" stroke="#2563eb" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="855" y="170" width="220" height="190" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="1.4" filter="url(#shadow)"/>
+<circle cx="885" cy="202" r="16" fill="#f97316"/>
+<text x="885" y="208" font-size="15" fill="white" text-anchor="middle" font-weight="700" font-family="Inter, Segoe UI, Arial, sans-serif">4</text>
+<rect x="913" y="192" width="42" height="5" rx="3" fill="#f97316"/>
+<text x="913" y="222" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Environment check</text>
+<text x="879" y="266" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Codes and aliases are normalized.</text>
+<line x1="1075" y1="265" x2="1102" y2="265" stroke="#2563eb" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="1115" y="170" width="220" height="190" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="1.4" filter="url(#shadow)"/>
+<circle cx="1145" cy="202" r="16" fill="#16a34a"/>
+<text x="1145" y="208" font-size="15" fill="white" text-anchor="middle" font-weight="700" font-family="Inter, Segoe UI, Arial, sans-serif">5</text>
+<rect x="1173" y="192" width="42" height="5" rx="3" fill="#16a34a"/>
+<text x="1173" y="222" font-size="18" fill="#0f172a" font-weight="700" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Human review</text>
+<text x="1139" y="266" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Draft can be approved, edited, or</text>
+<text x="1139" y="285" font-size="13.5" fill="#334155" font-weight="normal" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">rejected.</text>
+<rect x="120" y="500" width="1160" height="250" rx="28" fill="#ffffff" stroke="#dbeafe" filter="url(#shadow)"/>
+<text x="170" y="560" font-size="23" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter, Segoe UI, Arial, sans-serif">Example output package</text>
+<text x="180" y="610" font-size="15" fill="#2563eb" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">summary</text>
+<text x="340" y="610" font-size="15" fill="#334155" font-family="Inter, Segoe UI, Arial, sans-serif">Rattling air handler near second floor lab</text>
+<text x="180" y="642" font-size="15" fill="#2563eb" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">priority</text>
+<text x="340" y="642" font-size="15" fill="#334155" font-family="Inter, Segoe UI, Arial, sans-serif">NORMAL, inferred from wording</text>
+<text x="180" y="674" font-size="15" fill="#2563eb" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">trade</text>
+<text x="340" y="674" font-size="15" fill="#334155" font-family="Inter, Segoe UI, Arial, sans-serif">HVAC, matched to environment code</text>
+<text x="180" y="706" font-size="15" fill="#2563eb" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">asset_hint</text>
+<text x="340" y="706" font-size="15" fill="#334155" font-family="Inter, Segoe UI, Arial, sans-serif">Needs human confirmation</text>
+<text x="180" y="738" font-size="15" fill="#2563eb" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif">next_action</text>
+<text x="340" y="738" font-size="15" fill="#334155" font-family="Inter, Segoe UI, Arial, sans-serif">review_before_cmms_write</text>
+</svg>

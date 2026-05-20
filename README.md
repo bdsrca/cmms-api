@@ -1,852 +1,247 @@
-# CMMS Local AI API Management Console
+# Megamation CMMS SAGE API Showcase
 
-A local-first AI API management console for CMMS work-request intake, environment-specific validation, API testing, and controlled LLM output review.
+A public-safe technical showcase for a secure CMMS AI API control plane.
 
-> **External Demo URL:** `https://<your-cloudflare-tunnel-url>`  
-> Replace this placeholder with the Cloudflare public URL after deployment.
+The project shows how a maintenance organization can test AI-assisted work-request intake without sending private operating data to a public chatbot and without letting raw model output write directly into a CMMS.
+
+The short version:
+
+> A technician, customer, or dispatcher can describe a problem in plain language. The API extracts a work-order draft, validates it against the configured CMMS environment, checks output contracts, records safe audit metadata, and returns a reviewable result. Future versions can route the request through multiple specialist agents before a human approves the final action.
+
+This repository is written as a portfolio-ready case study. It avoids production URLs, customer names, raw API keys, private prompts, real work orders, tenant identifiers, and proprietary CMMS records.
 
 ---
 
-## 1. Project Overview
+## What this project demonstrates
 
-This project converts a basic local AI API test page into a full **CMMS AI API Management Console**.
+This is not just a prompt demo. The value is the control layer around the model.
 
-The system is designed for organizations that want to test and manage AI-assisted CMMS intake without immediately writing back to a live CMMS database. It provides a controlled management layer around local LLM calls, environment-specific code lists, validation rules, API keys, user access, test tools, and operational logs.
+| Area | What it shows |
+| --- | --- |
+| Private LLM API | A company-controlled model route for CMMS intake and validation experiments. |
+| Free token access | A safe demo token model with scopes, quotas, expiry, revocation, and audit metadata. |
+| CMMS environment validation | Code lists and rules that keep extracted fields aligned with each site or client setup. |
+| Output contracts | Schema checks before business validation runs. |
+| Voice intake | A future path where customers or technicians speak a request and receive a validated work-order draft. |
+| Screenshot intake | A future path where uploaded screenshots, photos, or UI captures become structured maintenance drafts. |
+| Multi-agent roadmap | Specialist agents for intake, asset context, priority, safety, parts, scheduling, and analytics. |
+| Targeted analytics | API-level hooks for focused maintenance insights rather than generic chatbot answers. |
+| Secure operations | Server-side model routing, sanitized logs, token hashing, least-privilege scopes, and no automatic write-back. |
 
-The core idea is simple:
+---
 
-```mermaid
-flowchart LR
-    A[User Request] --> B[Text or Voice Input]
-    B --> C[CMMS Intake API]
-    C --> D[AI Extraction]
-    D --> E[Output Contract Check]
-    E --> F[Environment Validation Rules]
-    F --> G[Validated CMMS Draft Response]
+## Architecture at a glance
+
+![Private CMMS AI API control plane](assets/private-cmms-ai-api-architecture.svg)
+
+The API is built around a simple rule:
+
+> The model may suggest. The API must validate. The CMMS write must remain controlled.
+
+The browser or external caller does not receive model provider secrets. Requests pass through a gateway that checks token scope, tenant or environment access, quota, output contract, validation rules, and logging policy before any result is returned.
+
+---
+
+## Why free token access matters
+
+A private AI API is hard to evaluate if every test requires manual setup. A controlled free-token layer makes pilots easier while keeping the system safe.
+
+![Free token lifecycle](assets/free-token-lifecycle.svg)
+
+A free token is not an unrestricted admin key. It is a scoped trial key:
+
+- It can be limited to one environment.
+- It can expire automatically.
+- It can carry a daily or monthly request quota.
+- It can be restricted to read-only and draft-only endpoints.
+- It can be revoked without touching the model backend.
+- It can log safe metadata without storing private request text.
+
+This is useful for sales demos, internal pilots, client onboarding, field testing, and proof-of-concept work with a private company LLM.
+
+---
+
+## Private LLM routing
+
+![Private LLM security boundary](assets/private-llm-security-boundary.svg)
+
+The model route can point to a local runtime, a private GPU server, a secured company model endpoint, or a vendor-hosted private deployment. The important part is the boundary:
+
+- Browser and external clients call the CMMS AI API, not the model directly.
+- Model endpoint secrets stay server-side.
+- The API redacts sensitive fields before logs are written.
+- Model names and backend routes do not need to appear in the public UI.
+- Prompts, templates, and contracts can be versioned and tested before promotion.
+
+For a Megamation-style CMMS environment, this allows AI intake to stay close to existing controlled fields such as site, building, area, asset, priority, trade, work type, assign-to group, issue-to group, and job category.
+
+---
+
+## Work-order draft flow
+
+![Intake to work-order draft](assets/intake-to-work-order-draft.svg)
+
+Example input:
+
+```text
+The air handler near the second floor lab is making a loud rattling noise.
+It started after lunch and the room is getting warm.
 ```
 
-The project is not a work-order creation engine. It is an AI-assisted **draft, validation, and API testing layer**.
-
----
-
-## 2. Why This Project Matters
-
-Most CMMS systems depend on structured fields:
-
-- Building
-- Room
-- Priority
-- Work order type
-- Assign-to
-- Issue-to
-- Job type
-- Custom site-specific codes
-
-Natural-language AI can extract these values, but raw model output is not enough. A useful CMMS AI layer must verify that extracted values match the customer’s configured environment.
-
-This project solves that problem by combining:
-
-1. **Environment-specific code lists**
-2. **Validation rules**
-3. **AI response validation**
-4. **API call generation**
-5. **Voice/text test intake**
-6. **Admin-controlled API and user management**
-
-The result is a practical local control plane for CMMS AI experimentation.
-
----
-
-## 3. Current Feature Set
-
-### 3.1 Modern SaaS Admin Portal
-
-The UI has been redesigned from raw browser-default controls into a modern admin interface.
-
-Design direction:
-
-- Linear-style clean SaaS admin layout
-- OpenAI-inspired neutral input surfaces
-- Replicate-style AI/API execution panels
-- Light theme
-- Soft blue/purple accent
-- Rounded controls
-- Compact tables
-- Clear validation states
-- Professional enterprise console layout
-
-The redesign covers:
-
-- Buttons
-- Inputs
-- Textareas
-- Select controls
-- Checkboxes
-- Switches
-- Segmented controls
-- Status badges
-- Tables
-- Cards
-- Command bars
-- Modals
-- Right-side blades
-- Login page
-- Global shell
-- Test Console
-- Voice Intake
-- API Builder
-- Output Contracts
-
-No React, Tailwind, shadcn, or heavy component library is required.
-
----
-
-### 3.2 Login, Logout, and Roles
-
-The portal includes role-aware access:
-
-| Role | Capabilities |
-|---|---|
-| Admin | Manage users, API keys, environments, code lists, validation rules, output contracts, logs, and settings |
-| User | Use Test Console, view accessible configuration, generate API calls, and test intake workflows |
-
-Admin-only features are visually marked in the navigation.
-
----
-
-### 3.3 Environment Resource Model
-
-The system is organized around **Environment** as the primary resource.
-
-An environment represents a CMMS configuration context such as:
-
-- `DEFAULT`
-- `TEST`
-- `CLIENT_A`
-- `TRAINING`
-- `PRODUCTION-LIKE-DEMO`
-
-Each environment can have its own:
-
-- Code lists
-- Validation rules
-- API examples
-- Usage logs
-- Settings
-- Test behavior
-
-Environment detail pages use a tabbed resource layout:
-
-- Overview
-- Code Lists
-- Validation Rules
-- Test Console
-- API Examples
-- Usage Logs
-- Settings
-
-This model makes the portal behave like a real management console instead of a loose collection of test pages.
-
----
-
-### 3.4 Code Lists
-
-Code Lists define the controlled CMMS values that AI output must match.
-
-Supported categories include:
-
-- Buildings
-- Rooms
-- Priorities
-- Work order types
-- Assign-to
-- Issue-to
-- Job types
-- Custom future categories
-
-Code List features:
-
-- Table/grid display
-- Search
-- Import modal
-- Import preview
-- Duplicate detection
-- Existing update / new insert statistics
-- Edit blade
-- Disable code
-- Alias support
-- Metadata JSON
-- Source tracking
-- Updated timestamp
-
-Example:
-
-| Code | Description | Aliases | Status |
-|---|---|---|---|
-| ARC | ARC Building | Arc, Arts Resource Centre | Enabled |
-| NORMAL | Normal Priority | Standard, Regular | Enabled |
-| HVAC | Heating / Cooling | Air conditioning, Furnace | Enabled |
-
----
-
-### 3.5 Validation Rules
-
-Validation Rules connect environment code lists to AI responses.
-
-The validation flow:
-
-```mermaid
-flowchart TD
-    A[AI Result] --> B[Check required fields]
-    B --> C[Check code list match]
-    C --> D[Check aliases and descriptions]
-    D --> E[Normalize values]
-    E --> F[Return errors, warnings, and normalized fields]
-```
-
-Validation supports:
-
-- Required fields
-- Optional fields
-- Must-match-code-list rules
-- Allow unknown value toggle
-- Warning vs. error severity
-- Enabled/disabled rule state
-- Alias matching
-- Description/label matching
-- Normalized output
-
-Example validation result:
+Example API result:
 
 ```json
 {
-  "valid": true,
-  "errors": [],
-  "warnings": [],
-  "normalized": {
-    "building": "ARC",
-    "room": "205",
-    "priority": "NORMAL",
-    "work_order_type": "HVAC"
-  }
+  "draft_type": "work_request",
+  "summary": "Air handler near second floor lab is rattling and the room is warming up.",
+  "priority": "NORMAL",
+  "trade": "HVAC",
+  "asset_hint": "air handler",
+  "location_hint": "second floor lab",
+  "confidence": 0.82,
+  "validation": {
+    "contract_valid": true,
+    "environment_valid": true,
+    "warnings": ["Exact asset match requires human confirmation."]
+  },
+  "next_action": "review_before_cmms_write"
 }
 ```
 
-This turns the AI layer from a loose text parser into a controlled CMMS validation pipeline.
+The returned object is a draft. It is not an automatic work order. A dispatcher, technician, or supervisor can review the result before writing to the live CMMS.
 
 ---
 
-### 3.6 AI Output Contract / Schema Manager
+## Voice and screenshot intake
 
-The Output Contract layer validates the **shape** of model output before environment-specific business validation runs.
+The future intake surface should support more than typing.
 
-This separates two different concerns:
+![Voice and visual intake](assets/voice-and-visual-intake.svg)
 
-| Layer | Purpose |
-|---|---|
-| Output Contract | Confirms the AI response has the expected JSON structure |
-| Environment Validation | Confirms extracted values are valid for the selected CMMS environment |
+Good future paths:
 
-Typical checks:
+- A customer speaks into a phone: “There is water leaking from the ceiling near Room 205.”
+- A technician uploads a screenshot of a fault panel.
+- A supervisor uploads a photo of a damaged component.
+- A dispatcher pastes a helpdesk email.
+- A customer support user uploads a web form capture.
 
-- Required field exists
-- Field type is correct
-- Unexpected fields are blocked or flagged
-- Contract version is tracked
-- Sample payload validation is available
-
-The Output Contracts page has been updated to a vertical layout:
-
-1. Contract list / contract definition at the top
-2. Detail and sample validation area below
-
-This gives both controls full-width space and makes schema review easier.
+All of these should converge into the same safe pipeline: extraction, contract validation, environment validation, review package, and controlled write-back.
 
 ---
 
-### 3.7 Test Console
+## Multi-agent direction
 
-The Test Console is the main operating surface for AI intake testing.
+![Future multi-agent CMMS API roadmap](assets/future-multi-agent-roadmap.svg)
 
-It supports:
+The first version can use one model call plus deterministic validation. The stronger future version uses multiple narrow agents:
 
-- Environment selection
-- API key auto-fill from default key
-- Text input
-- Voice input
-- Generated API call display
-- Extracted result display
-- Contract validation display
-- Environment validation display
-- Raw JSON response
-- Loading state during API call
-- Run button protection to avoid repeated submissions
+| Agent | Responsibility |
+| --- | --- |
+| Intake Agent | Turns messy text, voice transcript, or image-derived text into a clear request. |
+| Location Agent | Maps building, room, area, and site hints to valid CMMS codes. |
+| Asset Agent | Suggests likely asset records and warns when the match is weak. |
+| Priority Agent | Checks urgency, safety wording, SLA cues, and duplicate reports. |
+| Policy Agent | Blocks unsafe automation and applies site-specific rules. |
+| Parts Agent | Estimates likely parts or materials for planning, not automatic issue. |
+| Scheduling Agent | Suggests trade, shift, queue, and follow-up timing. |
+| Analytics Agent | Connects the request to failure history, backlog, downtime, and repeat issues. |
 
-Console output now supports:
-
-- Pretty result toggle
-- Copy button
-- Download button
-
-The same output pattern is applied across console panels so results can be reviewed, copied, or saved consistently.
+The point of multi-agent design is not to make the system complicated. The point is to keep each decision small, checkable, and explainable.
 
 ---
 
-### 3.8 Voice Intake Demo
+## Targeted data intelligence
 
-The Voice Intake Demo provides a lightweight browser-based speech-to-text input path.
+![Targeted maintenance analytics loop](assets/targeted-maintenance-analytics-loop.svg)
 
-The voice feature is intentionally simple:
+A private CMMS AI API becomes more valuable when it can answer targeted operational questions, for example:
 
-- Start / Stop only
-- Transcript area
-- Five-second silence auto-stop
-- Editable transcript before API submission
-- Same validation flow as text input
+- “Which assets keep generating noise complaints after PM?”
+- “Which locations have repeated HVAC comfort calls?”
+- “Which work types are often misclassified at intake?”
+- “Which buildings need better code-list aliases?”
+- “Which free-token users are testing the most useful scenarios?”
+- “Which draft fields fail validation most often?”
 
-No backend audio upload is used.
-
-No audio is stored by the app.
-
-The voice demo is an input source only:
-
-```mermaid
-flowchart LR
-    A[Speech] --> B[Browser Transcript]
-    B --> C[Editable Text]
-    C --> D[CMMS Intake API]
-    D --> E[Validated Draft]
-```
-
-This keeps the architecture simple and avoids premature audio-processing complexity.
+This is different from a generic dashboard. It is a feedback loop: intake requests reveal where data quality, code lists, asset naming, training, and maintenance planning need improvement.
 
 ---
 
-### 3.9 API Builder
+## Sanitized console mockups
 
-The API Builder helps users generate working API requests.
+These images are synthetic public-safe mockups. They show the intended workflow without exposing production data, real tokens, private model names, or customer records.
 
-It supports:
+![API console](screenshots/api-console.png)
 
-- Endpoint selection
-- Environment selection
-- API key selection
-- Request body configuration
-- PowerShell example
-- curl example
-- JSON body example
+![Free token console](screenshots/free-token-console.png)
 
-The layout follows a two-column structure:
+![Future multi-agent review](screenshots/multi-agent-review.png)
 
-| Left | Right |
-|---|---|
-| Endpoint and request controls | Generated API examples |
-
-Code panels use a clean developer-focused style inspired by Replicate-style API surfaces.
 
 ---
 
-### 3.10 API Key Management
-
-Admins can manage API access through the portal.
-
-Supported API key operations:
-
-- Generate key
-- Rename key
-- Disable key
-- View usage
-- Track last-used timestamp
-- Use default key for Test Console
-
-Plaintext API keys should only be displayed once at creation.
-
----
-
-### 3.11 Logs and Reports
-
-The portal includes operational visibility:
-
-- API usage events
-- Endpoint called
-- Environment code
-- User or API key
-- Status
-- Duration
-- Errors
-- Recent activity
-
-This makes the local API easier to debug and safer to demonstrate.
-
----
-
-### 3.12 Global Shell and Navigation
-
-The global shell includes:
-
-- Narrower left navigation
-- Grouped menu sections
-- Icons for menu items
-- Red admin-only marker for restricted features
-- Active item highlight
-- User/logout area
-- Service status
-
-The model name is hidden from the top-right UI to avoid exposing implementation details such as `qwen3:8b`.
-
----
-
-## 4. Architecture
-
-```mermaid
-flowchart TB
-    subgraph UI[FastAPI-Served Portal UI]
-        Login[Login Page]
-        Env[Environment Resource Pages]
-        Console[Test Console]
-        Voice[Voice Intake]
-        Builder[API Builder]
-        Admin[Admin Pages]
-    end
-
-    subgraph API[FastAPI Backend]
-        Auth[Auth and Sessions]
-        Intake[CMMS Intake Endpoint]
-        Validation[Validation Engine]
-        Contracts[Output Contract Validator]
-        Logs[Usage Logging]
-    end
-
-    subgraph DB[SQLite Configuration Database]
-        Users[Users]
-        ApiKeys[API Keys]
-        Environments[Environments]
-        Codes[Environment Code Lists]
-        Rules[Validation Rules]
-        OutputContracts[Output Contracts]
-        Usage[Usage Events]
-    end
-
-    subgraph LLM[Local LLM Runtime]
-        Ollama[Ollama / Local Model]
-    end
-
-    Login --> Auth
-    Env --> Environments
-    Console --> Intake
-    Voice --> Console
-    Builder --> Intake
-    Admin --> Users
-
-    Auth --> DB
-    Intake --> Contracts
-    Contracts --> Validation
-    Validation --> DB
-    Intake --> Ollama
-    Intake --> Logs
-    Logs --> Usage
-```
-
----
-
-## 5. Data Model Summary
-
-The portal uses SQLite for local configuration and usage tracking.
-
-Primary tables:
-
-| Table | Purpose |
-|---|---|
-| users | Portal users and roles |
-| sessions | Login sessions |
-| api_keys | API access keys |
-| environments | Environment resource definitions |
-| environment_codes | Code lists per environment |
-| environment_validation_rules | Validation rules per environment |
-| ai_output_contracts | Endpoint output contract definitions |
-| api_usage_events | API call history |
-| settings | Portal and remote-access settings |
-
-SQLite is used only for portal configuration and logs. It is not a CMMS production database.
-
----
-
-## 6. Security and Safety Boundaries
-
-This project intentionally keeps a narrow safety boundary.
-
-### The system does:
-
-- Parse work-request text
-- Extract likely CMMS fields
-- Validate output against configured environment values
-- Generate API examples
-- Track usage
-- Support admin/user access control
-
-### The system does not:
-
-- Automatically create work orders
-- Write directly to a CMMS database
-- Send emails
-- Store voice audio
-- Expose local machine process controls through remote admin UI
-- Treat raw AI output as trusted data
-
-The output is a validated draft, not an automatic transaction.
-
----
-
-## 7. Cloudflare Demo Access
-
-The portal can be exposed through a Cloudflare Tunnel for controlled external demonstration.
-
-Placeholder:
+## Repository structure
 
 ```text
-External URL: https://<your-cloudflare-tunnel-url>
-```
-
-Recommended demo flow:
-
-1. Open the Cloudflare public URL
-2. Log in as admin
-3. Open the Environment resource
-4. Review Code Lists
-5. Review Validation Rules
-6. Open Test Console
-7. Submit a text work request
-8. Try Voice Intake
-9. Review contract validation and environment validation
-10. Open API Builder and copy a generated PowerShell/curl request
-11. Review Logs
-
-Remote access should remain a demonstration and admin-access path only. Machine-level process controls should remain local-only.
-
----
-
-## 8. Demo Script
-
-### Scenario 1: Text Intake
-
-Input:
-
-```text
-There is a water leak in ARC room 205. It looks urgent.
-```
-
-Expected flow:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Portal
-    participant API
-    participant LLM
-    participant Validator
-
-    User->>Portal: Enter request text
-    Portal->>API: POST /api/ai/cmms-intake
-    API->>LLM: Extract CMMS fields
-    LLM-->>API: JSON draft
-    API->>Validator: Contract + environment validation
-    Validator-->>API: Pass/fail + normalized values
-    API-->>Portal: Validated response
-    Portal-->>User: Show result, errors, warnings, normalized fields
-```
-
-Possible result:
-
-```json
-{
-  "summary": "Water leak in ARC room 205.",
-  "building": "ARC",
-  "room": "205",
-  "priority": "URGENT",
-  "work_order_type": "PLUMBING"
-}
-```
-
-If `URGENT` is not configured in the selected environment, the validation layer flags it instead of silently accepting it.
-
----
-
-### Scenario 2: Voice Intake
-
-User speaks:
-
-```text
-ARC 205 房间有漏水问题，比较紧急�?```
-
-Flow:
-
-1. Browser converts speech to transcript
-2. User reviews transcript
-3. Portal sends transcript to `cmms-intake`
-4. AI extracts CMMS fields
-5. Validation rules normalize and verify the output
-6. Result panels show pass/fail evidence
-
----
-
-### Scenario 3: API Builder
-
-The user selects:
-
-- Endpoint: `cmms-intake`
-- Environment: `DEFAULT`
-- API key: default key
-- Body: work request text
-
-The portal generates:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "https://<your-cloudflare-tunnel-url>/api/ai/cmms-intake" `
-  -Method POST `
-  -Headers @{ "Authorization" = "Bearer <api-key>" } `
-  -ContentType "application/json" `
-  -Body '{
-    "environment_code": "DEFAULT",
-    "text": "There is a water leak in ARC room 205."
-  }'
+.
+|-- README.md
+|-- PAPER.md
+|-- docs/
+|   |-- architecture.md
+|   |-- free-token-access-model.md
+|   |-- private-llm-security.md
+|   |-- cmms-validation-contracts.md
+|   |-- voice-and-visual-intake.md
+|   |-- multi-agent-roadmap.md
+|   |-- targeted-analytics.md
+|   |-- api-design.md
+|   |-- deployment-runbook.md
+|   |-- portfolio-notes.md
+|   `-- source-code-map.md
+|-- assets/
+|   `-- *.svg
+|-- screenshots/
+|   `-- *.png
+|-- src/
+|   |-- free_token_policy.py
+|   |-- secure_logger.py
+|   |-- contract_validator.py
+|   |-- environment_validator.py
+|   |-- private_llm_gateway.py
+|   |-- agent_orchestrator.py
+|   |-- analytics_router.py
+|   |-- intake_pipeline.py
+|   `-- demo.py
+|-- data/
+|   |-- sample_environment.json
+|   |-- sample_requests.json
+|   `-- sample_tokens.json
+`-- tests/
+    `-- test_showcase.py
 ```
 
 ---
 
-## 9. Screenshots to Add
+## Run the showcase examples
 
-Recommended screenshot assets:
-
-```text
-assets/01-login.png
-assets/02-dashboard.png
-assets/03-environment-overview.png
-assets/04-code-lists.png
-assets/05-validation-rules.png
-assets/06-output-contracts.png
-assets/07-test-console-text.png
-assets/08-test-console-voice.png
-assets/09-api-builder.png
-assets/10-logs.png
-```
-
-Suggested placement:
-
-| Screenshot | Purpose |
-|---|---|
-| Login | Show polished entry point |
-| Dashboard | Show management-console feel |
-| Environment Overview | Show resource model |
-| Code Lists | Show controlled CMMS values |
-| Validation Rules | Show business validation |
-| Output Contracts | Show schema discipline |
-| Test Console Text | Show AI intake |
-| Test Console Voice | Show voice demo |
-| API Builder | Show developer usability |
-| Logs | Show operational visibility |
-
----
-
-## 10. Implementation Highlights
-
-### UI modernization
-
-The portal replaces raw HTML controls with a consistent UI system:
-
-```text
-.cmms-btn
-.cmms-input
-.cmms-select
-.cmms-checkbox
-.cmms-switch
-.cmms-badge
-.cmms-card
-.cmms-table
-.cmms-panel
-.cmms-command-bar
-.cmms-modal
-.cmms-blade
-.cmms-code-panel
-.cmms-segmented
-.cmms-nav
-```
-
-### Console output improvements
-
-All console output panels support:
-
-- Pretty result toggle
-- Copy
-- Download
-
-This improves the review and debugging workflow.
-
-### Voice simplification
-
-Voice intake is simplified to:
-
-- Start
-- Stop
-- Five-second silence auto-stop
-
-This avoids unnecessary controls and keeps the demo understandable.
-
-### API call usability
-
-Test Console now fills the default API key and shows a running/wait state while requests are in progress.
-
-This prevents double-click submission and makes local LLM latency visible to the user.
-
-### Navigation cleanup
-
-The left menu is narrower and uses icons. Admin-only features carry a red marker.
-
-### Model hiding
-
-The top-right UI no longer exposes the model name. This keeps the public demo focused on capability, not implementation details.
-
----
-
-## 11. Validation and Smoke Testing
-
-Recommended verification:
+The examples use only the Python standard library.
 
 ```bash
-python -m py_compile main.py
+python -m unittest discover -s tests
+python src/demo.py
 ```
 
-Manual smoke test checklist:
-
-- `/ui` loads
-- Login works
-- Dashboard loads
-- Environment detail loads
-- Code Lists table loads
-- Code Lists import preview works
-- Code Lists edit/disable works
-- Validation Rules load/edit/reset works
-- Output Contracts load and show vertical layout
-- Test Console text mode works
-- Pretty result toggle works
-- Copy result works
-- Download result works
-- API key auto-fill works
-- Run button shows loading state
-- Voice mode starts/stops correctly
-- Five-second silence auto-stop works
-- API Builder generates calls
-- API Keys page works
-- Users page works
-- Logs page works
-- Admin-only navigation marker appears
-- Model name is not shown in top-right UI
-- No JavaScript console errors
-- No backend API behavior changed
+The demo runs a local, deterministic mock pipeline. It does not call a real model endpoint, write to a CMMS, or require a secret.
 
 ---
 
-## 12. Technical Stack
+## Portfolio summary
 
-| Layer | Technology |
-|---|---|
-| Backend | FastAPI |
-| Configuration DB | SQLite |
-| Local LLM Runtime | Ollama / local model runtime |
-| UI Delivery | FastAPI-served HTML/CSS/JavaScript |
-| Styling | Custom CSS |
-| Remote Demo | Cloudflare Tunnel |
-| Speech Input | Browser SpeechRecognition API |
-| API Testing | Browser console + generated PowerShell/curl |
-
-No React build is required.
-
-No Tailwind dependency is required.
-
-No heavy UI component library is required.
+> Built a secure CMMS AI API control plane for Megamation-style work-request intake. The system demonstrates free-token onboarding, private LLM routing, environment-specific validation, output contracts, usage logging, and human-reviewed work-order drafts. The roadmap extends the same pipeline to voice intake, screenshot intake, multi-agent validation, and targeted maintenance analytics while keeping model secrets server-side and preventing raw AI output from writing directly to the CMMS.
 
 ---
 
-## 13. Future Roadmap
+## Public safety note
 
-### Near-term
-
-- Saved test case library
-- Replay from logs
-- Prompt version manager
-- Output contract version promotion workflow
-- Environment export/import
-- Configuration backup/restore
-
-### Mid-term
-
-- Knowledge-base indexing placeholder upgrade
-- Document retrieval testing
-- More advanced API key scopes
-- Tenant/environment-level permissions
-- Regression test runner
-
-### Later
-
-- Local Whisper speech-to-text option
-- Cloud STT provider option
-- Multi-step AI resolver for ambiguity
-- CMMS write-back integration with approval gate
-- Work-order draft review workflow
-- Optional email notification workflow
-
-Multiple-agent orchestration should come after output contracts, prompt versioning, replay, and regression tests are stable.
-
----
-
-## 14. Key Engineering Takeaways
-
-This project demonstrates:
-
-- Practical local AI API integration
-- CMMS-specific controlled vocabulary management
-- Deterministic validation around non-deterministic model output
-- Environment-based configuration
-- Admin/user role design
-- API key management
-- Browser-based voice intake prototype
-- Developer-friendly API call generation
-- Modern SaaS admin UI implementation without a heavy frontend stack
-- Clear separation between AI extraction and business validation
-
-The strongest technical decision is the separation of concerns:
-
-```mermaid
-flowchart LR
-    A[Prompt / Model Output] --> B[Output Contract]
-    B --> C[Environment Validation]
-    C --> D[Human Review]
-    D --> E[Future CMMS Action]
-```
-
-AI generates a draft. The system validates it. The user reviews it. Only future controlled workflows should take action.
-
----
-
-## 15. Status
-
-Current status:
-
-- Local management console implemented
-- Environment-centered resource model implemented
-- Code Lists implemented
-- Validation Rules implemented
-- AI response validation implemented
-- Test Console implemented
-- Voice Intake demo implemented
-- API Builder implemented
-- Output Contracts implemented
-- Modern UI pass completed
-- Cloudflare public demo URL pending
-
-External Demo URL:
-
-```text
-https://<your-cloudflare-tunnel-url>
-```
-
+This repository is a public-safe showcase. It does not include private Megamation configuration, production model routes, real API keys, customer records, private work orders, tenant identifiers, screenshots from private systems, or prompt logs with operational content.
