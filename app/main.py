@@ -32,6 +32,19 @@ from .db import (
     db_fetchall,
     db_fetchone,
 )
+from .output_contracts import (
+    activate_output_contract as activate_output_contract_helper,
+    active_contract,
+    create_output_contract as create_output_contract_helper,
+    list_output_contracts as list_output_contracts_helper,
+    list_output_contracts_for_endpoint as list_output_contracts_for_endpoint_helper,
+    patch_output_contract as patch_output_contract_helper,
+    read_output_contract as read_output_contract_helper,
+    seed_default_output_contracts,
+    skipped_ai_validation,
+    validate_contract_sample as validate_contract_sample_helper,
+    validate_output_contract,
+)
 from .prompt_comparisons import (
     get_prompt_comparison as get_prompt_comparison_helper,
     list_prompt_comparisons as list_prompt_comparisons_helper,
@@ -71,6 +84,15 @@ from .test_suites import (
     remove_test_suite_case as remove_test_suite_case_helper,
     run_test_suite as run_test_suite_helper,
     run_test_suite_batch as run_test_suite_batch_helper,
+)
+from .validation_rules import (
+    ensure_validation_rules,
+    get_validation_rules,
+    patch_validation_rule as patch_validation_rule_helper,
+    reset_environment_validation_rules as reset_environment_validation_rules_helper,
+    reset_validation_rules,
+    validate_ai_output,
+    validate_sample as validate_sample_helper,
 )
 from .workflow_trace import (
     cleanup_workflow_runs,
@@ -1127,69 +1149,6 @@ def seed_default_environment() -> None:
     reset_validation_rules("DEFAULT")
 
 
-def reset_validation_rules(environment_code: str) -> None:
-    timestamp = now_text()
-    with DB_LOCK:
-        with db_connect() as conn:
-            conn.execute("DELETE FROM environment_validation_rules WHERE environment_code = ?", (environment_code,))
-            for field_name, label, required, category, must_match, allow_unknown, severity, sort_order in DEFAULT_VALIDATION_RULES:
-                conn.execute(
-                    """
-                    INSERT INTO environment_validation_rules
-                    (environment_code, field_name, label, enabled, required, code_category,
-                     must_match_code_list, allow_unknown, severity, sort_order, updated_at)
-                    VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        environment_code,
-                        field_name,
-                        label,
-                        1 if required else 0,
-                        category,
-                        1 if must_match else 0,
-                        1 if allow_unknown else 0,
-                        severity,
-                        sort_order,
-                        timestamp,
-                    ),
-                )
-            conn.commit()
-
-
-def ensure_validation_rules(environment_code: str) -> None:
-    count = db_fetchone(
-        "SELECT COUNT(*) AS count FROM environment_validation_rules WHERE environment_code = ?",
-        (environment_code,),
-    )
-    if not count or count["count"] == 0:
-        reset_validation_rules(environment_code)
-
-
-def seed_default_output_contracts() -> None:
-    row = db_fetchone(
-        "SELECT id FROM ai_output_contracts WHERE endpoint = ? AND version = ?",
-        ("cmms-intake", "v1"),
-    )
-    if row:
-        return
-    timestamp = now_text()
-    db_execute(
-        """
-        INSERT INTO ai_output_contracts
-        (endpoint, version, name, status, schema_json, strict_mode, created_at, updated_at)
-        VALUES (?, ?, ?, 'active', ?, 1, ?, ?)
-        """,
-        (
-            "cmms-intake",
-            "v1",
-            "Default CMMS intake output contract",
-            json.dumps(DEFAULT_CMMS_INTAKE_CONTRACT),
-            timestamp,
-            timestamp,
-        ),
-    )
-
-
 def seed_default_prompt_versions() -> None:
     timestamp = now_text()
     for endpoint, spec in DEFAULT_PROMPT_VERSIONS.items():
@@ -1382,124 +1341,6 @@ def get_environment_values(environment_code: str) -> dict[str, list[str]]:
     return values
 
 
-def get_validation_rules(environment_code: str) -> list[dict[str, Any]]:
-    ensure_validation_rules(environment_code)
-    rows = db_fetchall(
-        """
-        SELECT id, environment_code, field_name, label, enabled, required, code_category,
-               must_match_code_list, allow_unknown, severity, sort_order, updated_at
-        FROM environment_validation_rules
-        WHERE environment_code = ?
-        ORDER BY sort_order, field_name
-        """,
-        (environment_code,),
-    )
-    return [dict(row) for row in rows]
-
-
-def build_code_lookup(environment_code: str, category: str | None) -> dict[str, str]:
-    if not category:
-        return {}
-    rows = db_fetchall(
-        """
-        SELECT code, label, aliases FROM code_values
-        WHERE environment_code = ? AND category = ? AND enabled = 1
-        """,
-        (environment_code, category),
-    )
-    lookup: dict[str, str] = {}
-    for row in rows:
-        code = str(row["code"])
-        candidates = [code, row["label"]]
-        aliases = row["aliases"] or ""
-        candidates.extend(part.strip() for part in aliases.split(",") if part.strip())
-        for candidate in candidates:
-            if candidate:
-                lookup[candidate.strip().casefold()] = code
-    return lookup
-
-
-def validation_issue(field: str, value: Any, message: str) -> dict[str, Any]:
-    return {"field": field, "value": value, "message": message}
-
-
-def validate_ai_output(environment_code: str, payload: dict[str, Any]) -> dict[str, Any]:
-    rules = get_validation_rules(environment_code)
-    errors: list[dict[str, Any]] = []
-    warnings: list[dict[str, Any]] = []
-    normalized: dict[str, Any] = {}
-
-    for rule in rules:
-        if not rule["enabled"]:
-            continue
-        field = rule["field_name"]
-        value = payload.get(field)
-        value_text = str(value).strip() if value is not None else ""
-        issues = errors if rule["severity"] == "error" else warnings
-
-        if rule["required"] and not value_text:
-            issues.append(validation_issue(field, value, f"{rule['label']} is required for environment {environment_code}."))
-            continue
-        if not value_text:
-            continue
-
-        if rule["must_match_code_list"]:
-            lookup = build_code_lookup(environment_code, rule["code_category"])
-            matched_code = lookup.get(value_text.casefold())
-            if matched_code:
-                normalized[field] = matched_code
-            elif not rule["allow_unknown"]:
-                issues.append(
-                    validation_issue(
-                        field,
-                        value,
-                        f"{rule['label']} is not in the configured code list for environment {environment_code}.",
-                    )
-                )
-            else:
-                normalized[field] = value
-        else:
-            normalized[field] = value
-
-    return {
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "normalized": normalized,
-    }
-
-
-def json_type_name(value: Any) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return "number"
-    if isinstance(value, list):
-        return "array"
-    if isinstance(value, dict):
-        return "object"
-    return type(value).__name__
-
-
-def type_matches(value: Any, expected: Any) -> bool:
-    expected_types = expected if isinstance(expected, list) else [expected]
-    actual = json_type_name(value)
-    if actual == "number" and "integer" in expected_types and isinstance(value, int) and not isinstance(value, bool):
-        return True
-    return actual in expected_types
-
-
-def active_contract(endpoint: str) -> sqlite3.Row | None:
-    return db_fetchone(
-        "SELECT * FROM ai_output_contracts WHERE endpoint = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1",
-        (endpoint,),
-    )
-
-
 def active_prompt_version(endpoint: str) -> sqlite3.Row:
     if endpoint not in SUPPORTED_PROMPT_ENDPOINTS:
         raise HTTPException(status_code=400, detail="Unsupported prompt endpoint")
@@ -1577,87 +1418,6 @@ def intake_prompt_messages(context: dict[str, Any], prompt_id: int | None = None
         for name in required
     }
     return messages, prompt_metadata(row)
-
-
-def validate_output_contract(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-    contract = active_contract(endpoint)
-    if not contract:
-        return {
-            "valid": True,
-            "errors": [],
-            "warnings": ["No active output contract configured."],
-            "contract_version": None,
-            "normalized_payload": payload,
-        }
-    try:
-        schema = json.loads(contract["schema_json"])
-    except json.JSONDecodeError:
-        return {
-            "valid": False,
-            "errors": ["Active output contract contains invalid schema JSON."],
-            "warnings": [],
-            "contract_version": contract["version"],
-            "normalized_payload": {},
-        }
-
-    errors: list[str] = []
-    warnings: list[str] = []
-    normalized: dict[str, Any] = {}
-
-    if schema.get("type") == "object" and not isinstance(payload, dict):
-        errors.append(f"Payload must be object, got {json_type_name(payload)}.")
-        return {
-            "valid": False,
-            "errors": errors,
-            "warnings": warnings,
-            "contract_version": contract["version"],
-            "normalized_payload": {},
-        }
-
-    properties = schema.get("properties") or {}
-    required = schema.get("required") or []
-    for field in required:
-        if field not in payload or payload.get(field) is None:
-            errors.append(f"Missing required field: {field}")
-
-    for field, value in payload.items():
-        field_schema = properties.get(field)
-        if not field_schema:
-            message = f"Additional property not allowed: {field}"
-            if contract["strict_mode"]:
-                errors.append(message)
-            else:
-                warnings.append(message)
-                normalized[field] = value
-            continue
-        if "type" in field_schema and not type_matches(value, field_schema["type"]):
-            errors.append(f"Field {field} must be {field_schema['type']}, got {json_type_name(value)}")
-            continue
-        normalized[field] = value
-
-    for field in properties:
-        if field not in normalized and field in payload:
-            normalized[field] = payload[field]
-
-    return {
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "contract_version": contract["version"],
-        "normalized_payload": normalized if len(errors) == 0 else {},
-    }
-
-
-def skipped_ai_validation() -> dict[str, Any]:
-    return {
-        "enabled": True,
-        "valid": None,
-        "status": "not_run",
-        "message": "Skipped because output contract validation failed.",
-        "errors": [],
-        "warnings": [],
-        "normalized": {},
-    }
 
 
 def resolve_validation_lists(request: ExtractFieldsRequest | TextRequest) -> tuple[list[str], list[str], str | None]:
@@ -4296,46 +4056,17 @@ async def patch_validation_rule(
     payload: ValidationRulePatchRequest,
     user: PortalUser = Depends(current_admin),
 ) -> dict[str, Any]:
-    row = db_fetchone(
-        "SELECT * FROM environment_validation_rules WHERE environment_code = ? AND id = ?",
-        (environment_code.upper(), rule_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Validation rule not found")
-    category = payload.code_category if payload.code_category is not None else row["code_category"]
-    if category and category not in CODE_CATEGORIES and not category.startswith("custom:"):
-        raise HTTPException(status_code=400, detail="Invalid code category")
-    db_execute(
-        """
-        UPDATE environment_validation_rules
-        SET enabled = ?, required = ?, code_category = ?, must_match_code_list = ?,
-            allow_unknown = ?, severity = ?, updated_at = ?
-        WHERE environment_code = ? AND id = ?
-        """,
-        (
-            1 if (payload.enabled if payload.enabled is not None else bool(row["enabled"])) else 0,
-            1 if (payload.required if payload.required is not None else bool(row["required"])) else 0,
-            category,
-            1 if (payload.must_match_code_list if payload.must_match_code_list is not None else bool(row["must_match_code_list"])) else 0,
-            1 if (payload.allow_unknown if payload.allow_unknown is not None else bool(row["allow_unknown"])) else 0,
-            payload.severity if payload.severity is not None else row["severity"],
-            now_text(),
-            environment_code.upper(),
-            rule_id,
-        ),
-    )
-    return {"status": "ok", "rule_id": rule_id}
+    return patch_validation_rule_helper(environment_code, rule_id, payload)
 
 
 @app.post("/api/admin/environments/{environment_code}/validation-rules/reset-defaults")
 async def reset_environment_validation_rules(environment_code: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    reset_validation_rules(environment_code.upper())
-    return {"status": "ok", "environment_code": environment_code.upper()}
+    return reset_environment_validation_rules_helper(environment_code)
 
 
 @app.post("/api/environments/{environment_code}/validate-sample")
 async def validate_sample(environment_code: str, payload: ValidateSampleRequest, user: PortalUser = Depends(current_user)) -> dict[str, Any]:
-    return validate_ai_output(environment_code.upper(), payload.values or {})
+    return validate_sample_helper(environment_code, payload.values)
 
 
 @app.get("/api/admin/users")
@@ -4375,12 +4106,7 @@ async def patch_user(user_id: int, payload: UserPatchRequest, user: PortalUser =
 
 @app.get("/api/output-contracts/{endpoint}")
 async def read_output_contract(endpoint: str, user: PortalUser = Depends(current_user)) -> dict[str, Any]:
-    row = active_contract(endpoint)
-    if not row:
-        raise HTTPException(status_code=404, detail="No active contract found")
-    result = dict(row)
-    result["schema_json"] = json.loads(result["schema_json"])
-    return result
+    return read_output_contract_helper(endpoint)
 
 
 @app.get("/api/prompt-versions/active/{endpoint}")
@@ -4399,115 +4125,32 @@ async def read_active_prompt_info(endpoint: str, user: PortalUser = Depends(curr
 
 @app.get("/api/admin/output-contracts")
 async def list_output_contracts(user: PortalUser = Depends(current_admin)) -> list[dict[str, Any]]:
-    rows = db_fetchall("SELECT * FROM ai_output_contracts ORDER BY endpoint, updated_at DESC")
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["schema_json"] = json.loads(item["schema_json"])
-        result.append(item)
-    return result
+    return list_output_contracts_helper()
 
 
 @app.get("/api/admin/output-contracts/{endpoint}")
 async def list_output_contracts_for_endpoint(endpoint: str, user: PortalUser = Depends(current_admin)) -> list[dict[str, Any]]:
-    rows = db_fetchall("SELECT * FROM ai_output_contracts WHERE endpoint = ? ORDER BY updated_at DESC", (endpoint,))
-    result = []
-    for row in rows:
-        item = dict(row)
-        item["schema_json"] = json.loads(item["schema_json"])
-        result.append(item)
-    return result
+    return list_output_contracts_for_endpoint_helper(endpoint)
 
 
 @app.post("/api/admin/output-contracts")
 async def create_output_contract(payload: OutputContractRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    timestamp = now_text()
-    if payload.status == "active":
-        db_execute("UPDATE ai_output_contracts SET status = 'archived', updated_at = ? WHERE endpoint = ? AND status = 'active'", (timestamp, payload.endpoint))
-    try:
-        db_execute(
-            """
-            INSERT INTO ai_output_contracts
-            (endpoint, version, name, status, schema_json, strict_mode, created_at, updated_at, created_by, updated_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                payload.endpoint,
-                payload.version,
-                payload.name,
-                payload.status,
-                json.dumps(payload.schema_def),
-                1 if payload.strict_mode else 0,
-                timestamp,
-                timestamp,
-                user.user_id,
-                user.user_id,
-            ),
-        )
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(status_code=409, detail="Contract endpoint/version already exists") from exc
-    row = db_fetchone("SELECT id FROM ai_output_contracts WHERE endpoint = ? AND version = ?", (payload.endpoint, payload.version))
-    return {"status": "ok", "contract_id": row["id"] if row else None}
+    return create_output_contract_helper(payload, user)
 
 
 @app.patch("/api/admin/output-contracts/{contract_id}")
 async def patch_output_contract(contract_id: int, payload: OutputContractPatchRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_output_contracts WHERE id = ?", (contract_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Contract not found")
-    timestamp = now_text()
-    new_status = payload.status if payload.status is not None else row["status"]
-    if new_status == "active" and row["status"] != "active":
-        db_execute("UPDATE ai_output_contracts SET status = 'archived', updated_at = ? WHERE endpoint = ? AND status = 'active'", (timestamp, row["endpoint"]))
-    db_execute(
-        """
-        UPDATE ai_output_contracts
-        SET name = ?, status = ?, schema_json = ?, strict_mode = ?, updated_at = ?, updated_by = ?
-        WHERE id = ?
-        """,
-        (
-            payload.name if payload.name is not None else row["name"],
-            new_status,
-            json.dumps(payload.schema_def) if payload.schema_def is not None else row["schema_json"],
-            1 if (payload.strict_mode if payload.strict_mode is not None else bool(row["strict_mode"])) else 0,
-            timestamp,
-            user.user_id,
-            contract_id,
-        ),
-    )
-    return {"status": "ok", "contract_id": contract_id}
+    return patch_output_contract_helper(contract_id, payload, user)
 
 
 @app.post("/api/admin/output-contracts/{contract_id}/activate")
 async def activate_output_contract(contract_id: int, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_output_contracts WHERE id = ?", (contract_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Contract not found")
-    timestamp = now_text()
-    db_execute("UPDATE ai_output_contracts SET status = 'archived', updated_at = ? WHERE endpoint = ? AND status = 'active'", (timestamp, row["endpoint"]))
-    db_execute("UPDATE ai_output_contracts SET status = 'active', updated_at = ?, updated_by = ? WHERE id = ?", (timestamp, user.user_id, contract_id))
-    return {"status": "ok", "contract_id": contract_id}
+    return activate_output_contract_helper(contract_id, user)
 
 
 @app.post("/api/admin/output-contracts/{contract_id}/validate-sample")
 async def validate_contract_sample(contract_id: int, payload: ValidateSampleRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-    row = db_fetchone("SELECT * FROM ai_output_contracts WHERE id = ?", (contract_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Contract not found")
-    schema = json.loads(row["schema_json"])
-    pseudo_endpoint = f"__contract_test_{contract_id}"
-    timestamp = now_text()
-    db_execute(
-        """
-        INSERT OR REPLACE INTO ai_output_contracts
-        (id, endpoint, version, name, status, schema_json, strict_mode, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
-        """,
-        (-contract_id, pseudo_endpoint, row["version"], row["name"], json.dumps(schema), row["strict_mode"], timestamp, timestamp),
-    )
-    result = validate_output_contract(pseudo_endpoint, payload.values or {})
-    db_execute("DELETE FROM ai_output_contracts WHERE id = ?", (-contract_id,))
-    return result
+    return validate_contract_sample_helper(contract_id, payload.values)
 
 
 @app.get("/api/admin/prompt-versions")
