@@ -16,13 +16,18 @@ def now_text() -> str:
 
 
 def seed_default_output_contracts() -> None:
+    target_version = "v2"
     row = db_fetchone(
         "SELECT id FROM ai_output_contracts WHERE endpoint = ? AND version = ?",
-        ("cmms-intake", "v1"),
+        ("cmms-intake", target_version),
     )
     if row:
         return
     timestamp = now_text()
+    db_execute(
+        "UPDATE ai_output_contracts SET status = 'archived', updated_at = ? WHERE endpoint = ? AND status = 'active'",
+        (timestamp, "cmms-intake"),
+    )
     db_execute(
         """
         INSERT INTO ai_output_contracts
@@ -31,8 +36,8 @@ def seed_default_output_contracts() -> None:
         """,
         (
             "cmms-intake",
-            "v1",
-            "Default CMMS intake output contract",
+            target_version,
+            "Default CMMS intake output contract with submission metadata",
             json.dumps(DEFAULT_CMMS_INTAKE_CONTRACT),
             timestamp,
             timestamp,

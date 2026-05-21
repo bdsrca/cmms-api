@@ -1,5 +1,25 @@
 """Shared configuration constants for extracted modules."""
 
+import json
+
+MODEL_NAME = "qwen3:8b"
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+SERVICE_NAME = "local-cmms-llm-api"
+ADVISORY_WARNING = "Advisory mode only. No CMMS write-back was performed."
+
+ALLOWED_REQUEST_TYPES = {
+    "HVAC",
+    "Plumbing",
+    "Electrical",
+    "Cleaning",
+    "Security",
+    "Key Request",
+    "Rekey Request",
+    "IT",
+    "General Maintenance",
+    "Unknown",
+}
+
 CODE_CATEGORIES = {
     "buildings": "Buildings",
     "rooms": "Rooms",
@@ -33,6 +53,101 @@ DEFAULT_CMMS_INTAKE_CONTRACT = {
         "issue_to": {"type": ["string", "null"]},
         "job_type": {"type": ["string", "null"]},
         "confidence": {"type": ["number", "null"]},
+        "submission": {"type": "object"},
+        "request": {"type": "object"},
     },
     "additionalProperties": False,
+}
+
+SUPPORTED_PROMPT_ENDPOINTS = {
+    "cmms-intake",
+    "summarize-work-order",
+    "extract-work-order-fields",
+    "cmms-assistant",
+}
+
+DEFAULT_PROMPT_VERSIONS = {
+    "summarize-work-order": {
+        "version": "v1",
+        "name": "Default summarize prompt",
+        "temperature": 0.1,
+        "system_prompt": (
+            "/no_think\n"
+            "You summarize CMMS work order requests. Return only a concise plain-text "
+            "summary in one clear sentence. Do not invent missing facts."
+        ),
+        "user_template": "{{text}}",
+    },
+    "cmms-assistant": {
+        "version": "v1",
+        "name": "Default controlled assistant prompt",
+        "temperature": 0.2,
+        "system_prompt": (
+            "/no_think\n"
+            "You are a controlled CMMS LLM portal assistant for local testing. "
+            "Answer conversationally and concisely, but stay within CMMS intake, API usage, "
+            "validation, troubleshooting, and drafting help. The user may write in English, "
+            "Chinese, French, Spanish, Japanese, Korean, or mixed language. "
+            "Do not claim that a work order was created. Do not approve requests, send emails, "
+            "write to CMMS, expose secrets, or provide instructions to bypass authentication. "
+            "If the user asks for an action outside advisory mode, explain the safety boundary."
+        ),
+        "user_template": "{{text}}",
+    },
+    "extract-work-order-fields": {
+        "version": "v1",
+        "name": "Default field extraction prompt",
+        "temperature": 0.1,
+        "system_prompt": (
+            "/no_think\n"
+            "Extract CMMS fields from the request. Return JSON only with this shape: "
+            "{\"request_type\":\"HVAC\",\"building\":\"ARC\",\"room\":\"205\",\"priority\":\"NORMAL\","
+            "\"summary\":\"Air conditioner in ARC room 205 is making loud noise.\","
+            "\"missing_fields\":[],\"needs_human_review\":false,\"confidence\":0.85}. "
+            "Allowed request_type values: {{allowed_request_types}}. "
+            "Valid buildings: {{valid_buildings}}. Valid priorities: {{valid_priorities}}. "
+            "The user request may be in English, Chinese, French, Spanish, Japanese, Korean, or mixed language. "
+            "Extract CMMS fields from the request. Return final structured field values using configured CMMS codes when possible. "
+            "Do not return translated free-text values for code fields if a configured code should be used. "
+            "Use null for unknown building or room. Do not invent missing facts."
+        ),
+        "user_template": "{{text}}",
+    },
+    "cmms-intake": {
+        "version": "v1",
+        "name": "Default intake workflow prompts",
+        "temperature": 0.1,
+        "system_prompt": json.dumps(
+            {
+                "classifier": (
+                    "/no_think\n"
+                    "Classify the CMMS request type only. Return JSON only with this shape: "
+                    "{\"request_type\":\"HVAC\",\"confidence\":0.85}. "
+                    "Allowed request_type values: {{allowed_request_types}}. "
+                    "The request may be in English, Chinese, French, Spanish, Japanese, Korean, or mixed language. "
+                    "Use Unknown when unclear."
+                ),
+                "field_extractor": (
+                    "/no_think\n"
+                    "Extract CMMS intake fields. Return JSON only with this shape: "
+                    "{\"building\":\"ARC\",\"room\":\"205\",\"priority\":\"NORMAL\","
+                    "\"summary\":\"Air conditioner in ARC room 205 is making loud noise.\"}. "
+                    "Valid buildings: {{valid_buildings}}. Valid priorities: {{valid_priorities}}. "
+                    "The user request may be in English, Chinese, French, Spanish, Japanese, Korean, or mixed language. "
+                    "Extract CMMS fields from the request. Return final structured field values using configured CMMS codes when possible. "
+                    "Do not return translated free-text values for code fields if a configured code should be used. "
+                    "Use null for unknown building or room. Do not invent missing facts."
+                ),
+                "draft_generator": (
+                    "/no_think\n"
+                    "Generate advisory CMMS draft text only. Return JSON only with this shape: "
+                    "{\"draft_wo_description\":\"string\",\"internal_note\":\"string\",\"client_reply\":\"string\"}. "
+                    "Do not claim a work order was created. Do not promise approval, dispatch, or email."
+                ),
+            },
+            ensure_ascii=True,
+            indent=2,
+        ),
+        "user_template": "{{text}}",
+    },
 }
