@@ -16,7 +16,7 @@ def now_text() -> str:
 
 
 def seed_default_output_contracts() -> None:
-    target_version = "v2"
+    target_version = "v3"
     row = db_fetchone(
         "SELECT id FROM ai_output_contracts WHERE endpoint = ? AND version = ?",
         ("cmms-intake", target_version),

@@ -149,6 +149,18 @@ def list_workflow_runs(
 def cleanup_workflow_runs(keep_latest: int = 1000) -> None:
     db_execute(
         """
+        DELETE FROM intake_metadata_reviews
+        WHERE run_id IN (
+            SELECT run_id FROM workflow_runs
+            WHERE id NOT IN (
+                SELECT id FROM workflow_runs ORDER BY id DESC LIMIT ?
+            )
+        )
+        """,
+        (keep_latest,),
+    )
+    db_execute(
+        """
         DELETE FROM workflow_run_steps
         WHERE run_id IN (
             SELECT run_id FROM workflow_runs

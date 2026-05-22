@@ -44,14 +44,19 @@ class EmailIntakeApiTests(unittest.TestCase):
         self.assertTrue(text.endswith("Water is leaking under the sink."))
 
     def test_email_intake_endpoint_is_registered_for_email_payloads(self) -> None:
-        main_source = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+        model_source = (ROOT / "app" / "models.py").read_text(encoding="utf-8")
+        route_source = (ROOT / "app" / "ai_routes.py").read_text(encoding="utf-8")
+        request_model = model_source.split("class EmailIntakeRequest", 1)[1].split("class", 1)[0]
+        email_route = route_source.split('async def email_intake', 1)[1].split("\n\n", 1)[0]
 
-        self.assertIn('/api/ai/intake/email', main_source)
-        self.assertIn("class EmailIntakeRequest", main_source)
-        self.assertIn('source="email_api"', main_source)
-        self.assertIn("submitted_phone", main_source)
-        self.assertIn("requested_due_at", main_source)
-        self.assertIn("location: IntakeLocation", main_source)
+        self.assertIn('/api/ai/intake/email', route_source)
+        self.assertIn("class EmailIntakeRequest", model_source)
+        self.assertIn('source="email_api"', route_source)
+        self.assertNotIn("submitted_phone", request_model)
+        self.assertNotIn("requested_due_at", request_model)
+        self.assertNotIn("location: IntakeLocation", request_model)
+        self.assertNotIn("submission=SubmissionMetadata", email_route)
+        self.assertNotIn("request=IntakeRequestMetadata", email_route)
 
 
 if __name__ == "__main__":

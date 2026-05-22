@@ -9,7 +9,8 @@ from fastapi import HTTPException
 from .config import ADVISORY_WARNING, ALLOWED_REQUEST_TYPES, MODEL_NAME, OLLAMA_CHAT_URL
 from .db import db_execute
 from .environments import get_environment_values
-from .intake_metadata import build_intake_metadata
+from .intake_metadata import build_intake_metadata, extract_metadata_from_text, unreviewed_metadata_review
+from .intake_metadata_reviews import save_extracted_metadata_review
 from .output_contracts import skipped_ai_validation, validate_output_contract
 from .prompts import intake_prompt_messages, prompt_messages
 from .validation_rules import validate_ai_output
@@ -22,16 +23,6 @@ from .workflow_trace import (
 )
 
 OllamaCaller = Callable[..., Awaitable[str]]
-
-
-def metadata_dict(value: Any) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return value
-    if hasattr(value, "model_dump"):
-        return value.model_dump(exclude_none=True)
-    return None
 
 
 def normalize_allowed_values(values: list[str]) -> list[str]:
@@ -385,8 +376,7 @@ async def cmms_intake(
         metadata = build_intake_metadata(
             source=intake_source or "text",
             fields=fields,
-            submission=metadata_dict(getattr(payload, "submission", None)),
-            request=metadata_dict(getattr(payload, "request", None)),
+            extracted=extract_metadata_from_text(payload.text),
         )
         if metadata["request"]["location_conflict"]:
             validation["needs_human_review"] = True
@@ -424,6 +414,8 @@ async def cmms_intake(
         current_step = None
 
         location = metadata["request"]["location"]
+        metadata_review = unreviewed_metadata_review()
+        save_extracted_metadata_review(run_id, metadata["submission"], metadata["request"])
         result_payload = {
             "summary": fields["summary"],
             "building": location.get("building") or fields["building"],
@@ -436,6 +428,7 @@ async def cmms_intake(
             "confidence": confidence,
             "submission": metadata["submission"],
             "request": metadata["request"],
+            "metadata_review": metadata_review,
         }
 
         current_step = start_workflow_step(run_id, "output_contract_validation", 30, input_summary="endpoint=cmms-intake")
@@ -519,6 +512,7 @@ async def cmms_intake(
             "ai_validation": ai_validation,
             "submission": metadata["submission"],
             "request": metadata["request"],
+            "metadata_review": metadata_review,
             "raw": {"included": False},
             "request_type": request_type,
             "classification_confidence": confidence,

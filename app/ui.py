@@ -98,6 +98,10 @@ PORTAL_HTML = r"""<!doctype html>
     .ai-panel-dark { background: #0b0f19; color: #f8fafc; border-color: #0b0f19; }
     .ai-panel-dark pre { min-height: 180px; padding: 0; background: transparent; }
     .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; }
+    .metadata-item { border: 1px solid var(--replicate-line); background: #f8fafc; padding: 8px; min-width: 0; }
+    .metadata-item label { margin-bottom: 4px; }
+    .metadata-value { overflow-wrap: anywhere; }
     .readiness { border-left: 3px solid var(--azure); background: #edf5ff; padding: 10px; }
     .readiness.fail { border-left-color: var(--danger); background: #fff1f1; }
     .readiness.warn { border-left-color: #f1c21b; background: #fcf4d6; }
@@ -355,7 +359,7 @@ PORTAL_HTML = r"""<!doctype html>
       envTab: "codes", selectedCategory: "buildings", selectedCode: null, codeData: null, validationRules: [],
       inputMode: "text", recognition: null, voiceSupported: null, voiceBaseTranscript: "", voiceFinalTranscript: "",
       voiceStopping: false, voiceStatus: "Idle", voiceSilenceTimer: null, outputs: {},
-      lastTestResponse: null, lastTestInput: null, selectedTestCaseId: null
+      lastTestResponse: null, lastTestInput: null, metadataReviewExtracted: null, selectedTestCaseId: null
     };
     const menu = [
       ["dashboard","Dashboard",false,"▦"],["test","Test Console",false,"▶"],["email","Email Intake",false,"✉"],["builder","API Builder",false,"⌘"],["testCases","Test Cases",true,"✓"],["testSuites","Test Suites",true,"✓"],
@@ -494,6 +498,7 @@ PORTAL_HTML = r"""<!doctype html>
         <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: none</div></div><span id="runStatus" class="pill">Ready</span></div>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run CMMS Intake to evaluate whether enough validated information exists for a human-controlled workflow.</div></div>
+            <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run CMMS Intake to extract metadata.</span></div></div>
             <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">Run CMMS Intake to see trace steps.</span></div></div>
             <div class="result-grid">
               <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">Run a request to see contract validation.</span></div></div>
@@ -514,11 +519,6 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="ai-panel stack email-compose">
             <label>From</label><input id="emailFrom" placeholder="tenant@example.com">
             <label>To</label><input id="emailTo" placeholder="maintenance@example.com">
-            <label>Submitted by</label><input id="emailSubmittedBy" placeholder="John Smith">
-            <label>Phone</label><input id="emailPhone" placeholder="416-555-0101">
-            <label>Requested due</label><input id="emailDue" placeholder="2026-05-24T17:00:00Z">
-            <label>Location</label><input id="emailLocationRaw" placeholder="ARC room 205">
-            <div class="row"><div style="flex:1"><label>Building</label><input id="emailBuilding" placeholder="ARC"></div><div style="flex:1"><label>Room</label><input id="emailRoom" placeholder="205"></div></div>
             <label>Subject</label><input id="emailSubject" placeholder="Leak in ARC 205">
             <label>Body</label><textarea id="emailBody" placeholder="Paste email body"></textarea>
             <input id="emailImportFile" type="file" accept=".eml,.txt,message/rfc822,text/plain" style="display:none" onchange="handleEmailImport(event)">
@@ -528,6 +528,7 @@ PORTAL_HTML = r"""<!doctype html>
         <div class="card playground span-7"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: email API</div></div><span id="runStatus" class="pill">Ready</span></div>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run Email to evaluate the request.</div></div>
+            <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run Email to extract metadata.</span></div></div>
             <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">No run yet.</span></div></div>
             <div class="result-grid">
               <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">No run yet.</span></div></div>
@@ -544,17 +545,8 @@ PORTAL_HTML = r"""<!doctype html>
       state.voiceSupported = Boolean(supported);
       $("testInputPanel").innerHTML = `<div class="ai-panel stack">
           <label>Content</label>
-          <textarea id="tText">The air conditioner in ARC room 205 is making loud noise and the room is too warm.</textarea>
+          <textarea id="tText">The air conditioner in ARC room 205 is making loud noise and the room is too warm. My name is Leon, phone is 1234, email address is bdsrca@gmail.com. I wanted it done by the end of this week.</textarea>
           <div class="button-grid"><button id="runTestBtn" onclick="runTest('text')">Run Text</button><button class="secondary" onclick="clearVoiceTranscript()">Clear</button><button class="secondary" onclick="openSaveCurrentTestCase()">Save as Test Case</button><button class="secondary" onclick="runMatchingTestCase()">Run Matching Test</button></div>
-        </div>
-        <div class="voice-panel stack">
-          <div class="status-line"><strong>Metadata</strong><span class="pill">optional</span></div>
-          <label>Submitted by</label><input id="testSubmittedBy" placeholder="John Smith">
-          <label>Email</label><input id="testSubmittedEmail" placeholder="john@example.com">
-          <label>Phone</label><input id="testSubmittedPhone" placeholder="416-555-0101">
-          <label>Requested due</label><input id="testDue" placeholder="2026-05-24T17:00:00Z">
-          <label>Location</label><input id="testLocationRaw" placeholder="ARC room 205">
-          <div class="row"><div style="flex:1"><label>Building</label><input id="testBuilding" placeholder="ARC"></div><div style="flex:1"><label>Room</label><input id="testRoom" placeholder="205"></div></div>
         </div>
         <div class="voice-panel stack">
           <div class="status-line"><strong>Speech provider: Browser Speech Recognition</strong><span id="voiceStatus" class="pill">${escapeHtml(state.voiceStatus || "Idle")}</span></div>
@@ -693,15 +685,8 @@ PORTAL_HTML = r"""<!doctype html>
       state.voiceBaseTranscript = "";
       state.voiceFinalTranscript = "";
       if ($("tText")) $("tText").value = "";
-      clearTestMetadata();
       if ($("emailFrom")) $("emailFrom").value = "";
       if ($("emailTo")) $("emailTo").value = "";
-      if ($("emailSubmittedBy")) $("emailSubmittedBy").value = "";
-      if ($("emailPhone")) $("emailPhone").value = "";
-      if ($("emailDue")) $("emailDue").value = "";
-      if ($("emailLocationRaw")) $("emailLocationRaw").value = "";
-      if ($("emailBuilding")) $("emailBuilding").value = "";
-      if ($("emailRoom")) $("emailRoom").value = "";
       if ($("emailSubject")) $("emailSubject").value = "";
       if ($("emailBody")) $("emailBody").value = "";
       setVoiceStatus("Idle", "Transcript cleared.");
@@ -718,41 +703,12 @@ PORTAL_HTML = r"""<!doctype html>
       parts.push("", "Body:", body);
       return parts.join("\n").trim();
     }
-    function clearTestMetadata() {
-      for (const id of ["testSubmittedBy", "testSubmittedEmail", "testSubmittedPhone", "testDue", "testLocationRaw", "testBuilding", "testRoom"]) {
-        if ($(id)) $(id).value = "";
-      }
-    }
-    function buildTestIntakeMetadata(source) {
-      const submission = {
-        submitted_by: ($("testSubmittedBy")?.value || "").trim() || null,
-        submitted_email: ($("testSubmittedEmail")?.value || "").trim() || null,
-        submitted_phone: ($("testSubmittedPhone")?.value || "").trim() || null,
-        submitted_method: source === "voice_transcript" ? "voice_transcript" : "manual"
-      };
-      const request = {
-        requested_due_at: ($("testDue")?.value || "").trim() || null,
-        location: {
-          raw: ($("testLocationRaw")?.value || "").trim() || null,
-          building: ($("testBuilding")?.value || "").trim() || null,
-          room: ($("testRoom")?.value || "").trim() || null,
-          area: null
-        }
-      };
-      return { submission, request };
-    }
     function copyEmailToText() {
       if ($("tText")) $("tText").value = buildEmailIntakeContent();
     }
     function clearEmailIntake() {
       if ($("emailFrom")) $("emailFrom").value = "";
       if ($("emailTo")) $("emailTo").value = "";
-      if ($("emailSubmittedBy")) $("emailSubmittedBy").value = "";
-      if ($("emailPhone")) $("emailPhone").value = "";
-      if ($("emailDue")) $("emailDue").value = "";
-      if ($("emailLocationRaw")) $("emailLocationRaw").value = "";
-      if ($("emailBuilding")) $("emailBuilding").value = "";
-      if ($("emailRoom")) $("emailRoom").value = "";
       if ($("emailSubject")) $("emailSubject").value = "";
       if ($("emailBody")) $("emailBody").value = "";
       setConsoleOutput("tOut", {});
@@ -786,15 +742,6 @@ PORTAL_HTML = r"""<!doctype html>
       const payload = {
         from_email: ($("emailFrom")?.value || "").trim(),
         to_email: ($("emailTo")?.value || "").trim(),
-        submitted_by: ($("emailSubmittedBy")?.value || "").trim() || null,
-        submitted_phone: ($("emailPhone")?.value || "").trim() || null,
-        requested_due_at: ($("emailDue")?.value || "").trim() || null,
-        location: {
-          raw: ($("emailLocationRaw")?.value || "").trim() || null,
-          building: ($("emailBuilding")?.value || "").trim() || null,
-          room: ($("emailRoom")?.value || "").trim() || null,
-          area: null
-        },
         subject: ($("emailSubject")?.value || "").trim(),
         body: ($("emailBody")?.value || "").trim(),
         environment_code: $("eEnv").value
@@ -811,10 +758,12 @@ PORTAL_HTML = r"""<!doctype html>
         if ($("runStatus")) $("runStatus").textContent = "Complete";
         setConsoleOutput("tOut", data);
         state.lastTestResponse = data;
+        state.metadataReviewExtracted = cloneConsoleData(data);
         state.lastTestInput = { endpoint: "intake/email", environment_code: $("eEnv").value, text: buildEmailIntakeContent(), source: "email_api" };
         renderContractValidation(data.contract);
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
+        renderIntakeMetadata(data);
         renderWorkflowTraceFromResponse(data, "tTrace");
       } catch (e) {
         if ($("runStatus")) $("runStatus").textContent = "Error";
@@ -846,11 +795,6 @@ PORTAL_HTML = r"""<!doctype html>
       }
       const body = { text, environment_code: $("tEnv").value };
       if (source !== "text") body.source = source;
-      if (ep === "cmms-intake") {
-        const metadata = buildTestIntakeMetadata(source);
-        body.submission = metadata.submission;
-        body.request = metadata.request;
-      }
       try {
         setRunLoading(true);
         const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": $("tKey").value }, body: JSON.stringify(body) });
@@ -859,10 +803,12 @@ PORTAL_HTML = r"""<!doctype html>
         if ($("runStatus")) $("runStatus").textContent = "Complete";
         setConsoleOutput("tOut", data);
         state.lastTestResponse = data;
+        state.metadataReviewExtracted = cloneConsoleData(data);
         state.lastTestInput = { endpoint: ep, environment_code: $("tEnv").value, text, source };
         renderContractValidation(data.contract);
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
+        renderIntakeMetadata(data);
         renderWorkflowTraceFromResponse(data, "tTrace");
         if (source === "voice_transcript") setVoiceStatus("Idle", "Voice transcript sent to the API.");
       } catch (e) {
@@ -894,6 +840,69 @@ PORTAL_HTML = r"""<!doctype html>
       const summary = readinessSummary(data);
       $("tReadiness").className = `readiness ${summary.cls}`;
       $("tReadiness").innerHTML = summary.html;
+    }
+
+    function renderIntakeMetadata(data) {
+      if (!$("tMetadata")) return;
+      const submission = data?.submission || data?.result?.submission || {};
+      const request = data?.request || data?.result?.request || {};
+      const location = request.location || {};
+      $("tMetadata").innerHTML = `<div class="metadata-grid">
+          <div class="metadata-item"><label>Submitted by</label><input id="metadataSubmittedBy" value="${escapeAttr(submission.submitted_by || "")}"></div>
+          <div class="metadata-item"><label>Email</label><input id="metadataEmail" type="email" value="${escapeAttr(submission.submitted_email || "")}"></div>
+          <div class="metadata-item"><label>Phone</label><input id="metadataPhone" value="${escapeAttr(submission.submitted_phone || "")}"></div>
+          <div class="metadata-item"><label>Requested due</label><input type="date" id="metadataDue" value="${escapeAttr(request.requested_due || "")}"></div>
+          <div class="metadata-item"><label>Building</label><input id="metadataBuilding" value="${escapeAttr(location.building || "")}"></div>
+          <div class="metadata-item"><label>Room</label><input id="metadataRoom" value="${escapeAttr(location.room || "")}"></div>
+          <div class="metadata-item"><label>Method</label><div class="metadata-value">${submission.submitted_method ? escapeHtml(submission.submitted_method) : '<span class="muted">-</span>'}</div></div>
+          <div class="metadata-item"><label>Source phrase</label><div class="metadata-value">${request.requested_due_raw ? escapeHtml(request.requested_due_raw) : '<span class="muted">-</span>'}</div></div>
+        </div>
+        <div class="row" style="margin-top:10px"><button onclick="applyMetadataReview()">Apply</button><button class="secondary" onclick="resetMetadataReview()">Reset</button></div>`;
+    }
+
+    function metadataReviewValue(id) {
+      return ($(id)?.value || "").trim() || null;
+    }
+
+    async function applyMetadataReview() {
+      const data = state.lastTestResponse;
+      if (!data?.run_id) return;
+      const patch = {
+        submitted_by: metadataReviewValue("metadataSubmittedBy"),
+        submitted_email: metadataReviewValue("metadataEmail"),
+        submitted_phone: metadataReviewValue("metadataPhone"),
+        requested_due: metadataReviewValue("metadataDue"),
+        building: metadataReviewValue("metadataBuilding"),
+        room: metadataReviewValue("metadataRoom")
+      };
+      let review = null;
+      try {
+        review = await api(`/api/admin/workflow-runs/${data.run_id}/metadata-review/apply`, { method: "POST", body: JSON.stringify(patch) });
+      } catch (e) {
+        setConsoleOutput("tOut", e.data || { error: e.message });
+        return;
+      }
+      data.submission = review.submission;
+      data.request = review.request;
+      data.metadata_review = review.metadata_review;
+      if (data.result) {
+        data.result.submission = review.submission;
+        data.result.request = review.request;
+        data.result.building = review.request?.location?.building || null;
+        data.result.room = review.request?.location?.room || null;
+        data.result.metadata_review = review.metadata_review;
+      }
+      state.lastTestResponse = data;
+      setConsoleOutput("tOut", data);
+      renderIntakeMetadata(data);
+    }
+
+    function resetMetadataReview() {
+      if (!state.metadataReviewExtracted) return;
+      const data = cloneConsoleData(state.metadataReviewExtracted);
+      state.lastTestResponse = data;
+      setConsoleOutput("tOut", data);
+      renderIntakeMetadata(data);
     }
 
     function readinessSummary(data) {
@@ -981,7 +990,43 @@ PORTAL_HTML = r"""<!doctype html>
       }).join("");
       return `<div class="status-line"><strong>${escapeHtml(trace.run_id)}</strong><span class="pill ${trace.status === "failed" ? "danger" : trace.status === "completed_with_warnings" ? "warning" : "ok"}">${escapeHtml(trace.status)}</span></div>
         <div class="row" style="margin:10px 0"><button class="secondary" onclick="createTestCaseFromTrace('${escapeAttr(trace.run_id)}')">Create Test Case from Run</button><button class="secondary" onclick="replayWorkflowRun('${escapeAttr(trace.run_id)}')">Replay Run</button></div>
+        ${renderTraceMetadataReview(trace.metadata_review)}
         ${rows || '<p class="muted">No steps recorded.</p>'}`;
+    }
+
+    function renderTraceMetadataReview(review) {
+      if (!review) return "";
+      const extracted = review.extracted || {};
+      const currentLocation = review.request?.location || {};
+      const extractedLocation = extracted.request?.location || {};
+      const rows = [
+        ["Submitted by", extracted.submission?.submitted_by, review.submission?.submitted_by],
+        ["Email", extracted.submission?.submitted_email, review.submission?.submitted_email],
+        ["Phone", extracted.submission?.submitted_phone, review.submission?.submitted_phone],
+        ["Requested due", extracted.request?.requested_due, review.request?.requested_due],
+        ["Location", [extractedLocation.building, extractedLocation.room].filter(Boolean).join(" "), [currentLocation.building, currentLocation.room].filter(Boolean).join(" ")]
+      ].map(([label, extractedValue, reviewedValue]) => `<div class="status-line" style="border-bottom:1px solid #eef0f3;padding:6px 0"><strong>${escapeHtml(label)}</strong><span class="muted">${escapeHtml(extractedValue || "-")} -> ${escapeHtml(reviewedValue || "-")}</span></div>`).join("");
+      const corrected = review.metadata_review?.corrected_fields || [];
+      const handoffTarget = handoffCandidateTarget(review.run_id);
+      const handoff = review.metadata_review?.reviewed ? `<div class="row" style="margin-top:10px"><button class="secondary" onclick="loadCmmsHandoffCandidate('${escapeAttr(review.run_id)}')">CMMS Candidate</button></div><pre id="${escapeAttr(handoffTarget)}" style="display:none;min-height:120px;margin-top:8px"></pre>` : "";
+      return `<div class="ai-panel" style="margin:10px 0"><div class="status-line"><h3>Intake Metadata Review</h3><span class="pill ${review.metadata_review?.reviewed ? "ok" : "warning"}">${review.metadata_review?.reviewed ? "Reviewed" : "Extracted"}</span></div>${rows}<div class="muted" style="margin-top:8px">Corrected: ${escapeHtml(corrected.length ? corrected.join(", ") : "none")}</div>${handoff}</div>`;
+    }
+
+    function handoffCandidateTarget(runId) {
+      return `handoffCandidate_${String(runId || "").replace(/[^A-Za-z0-9_-]/g, "_")}`;
+    }
+
+    async function loadCmmsHandoffCandidate(runId) {
+      const target = $(handoffCandidateTarget(runId));
+      if (!target) return;
+      try {
+        const candidate = await api(`/api/admin/workflow-runs/${runId}/cmms-handoff-candidate`);
+        target.style.display = "block";
+        target.textContent = JSON.stringify(candidate, null, 2);
+      } catch (e) {
+        target.style.display = "block";
+        target.textContent = JSON.stringify(e.data || { error: e.message }, null, 2);
+      }
     }
 
     function issueList(items) {
@@ -996,6 +1041,10 @@ PORTAL_HTML = r"""<!doctype html>
     function setConsoleOutput(id, value, isJson = true) {
       state.outputs[id] = { value, isJson };
       refreshConsoleOutput(id);
+    }
+
+    function cloneConsoleData(value) {
+      return JSON.parse(JSON.stringify(value));
     }
 
     function formatConsoleOutput(id) {
@@ -1382,10 +1431,6 @@ PORTAL_HTML = r"""<!doctype html>
         return {
           from_email: "tenant@example.com",
           to_email: "maintenance@example.com",
-          submitted_by: "John Smith",
-          submitted_phone: "416-555-0101",
-          requested_due_at: "2026-05-24T17:00:00Z",
-          location: { raw: "ARC room 205", building: "ARC", room: "205", area: null },
           subject: "Leak in ARC 205",
           body: $("bText").value,
           environment_code: $("bEnv").value
@@ -1393,25 +1438,13 @@ PORTAL_HTML = r"""<!doctype html>
       }
       const bodyObj = { text: $("bText").value, environment_code: $("bEnv").value };
       if ($("bSource").value !== "text") bodyObj.source = $("bSource").value;
-      if (endpoint === "cmms-intake") {
-        bodyObj.submission = {
-          submitted_by: "John Smith",
-          submitted_email: "john@example.com",
-          submitted_phone: "416-555-0101",
-          submitted_method: $("bSource").value === "voice_transcript" ? "voice_transcript" : "api"
-        };
-        bodyObj.request = {
-          requested_due_at: "2026-05-24T17:00:00Z",
-          location: { raw: "ARC room 205", building: "ARC", room: "205", area: null }
-        };
-      }
       return bodyObj;
     }
 
     function endpointDoc(endpoint, includeValidation) {
       const docs = {
         "cmms-intake": ["POST /api/ai/cmms-intake", "Returns endpoint, environment_code, contract validation, result, ai_validation, advisory validation, drafts, and model.", "Use contract.valid plus ai_validation.valid plus validation.can_create_work_order to decide if the request has enough information for a human-controlled CMMS workflow."],
-        "intake/email": ["POST /api/ai/intake/email", "Accepts email fields, submission metadata, requested due date, and location.", "Runs the same advisory intake workflow with source email_api."],
+        "intake/email": ["POST /api/ai/intake/email", "Accepts email fields and extracts intake metadata from the email content.", "Runs the same advisory intake workflow with source email_api."],
         "cmms-assistant": ["POST /api/ai/cmms-assistant", "Returns a controlled conversational CMMS assistant response and safety flags.", "This is not a generic /chat endpoint. It is advisory-only and cannot write to CMMS, create work orders, or send emails."],
         "extract-work-order-fields": ["POST /api/ai/extract-work-order-fields", "Returns extracted request_type, building, room, priority, summary, missing_fields, needs_human_review, and confidence.", "Use missing_fields and needs_human_review to decide if a human must complete the request."],
         "summarize-work-order": ["POST /api/ai/summarize-work-order", "Returns one summary string.", "This endpoint does not validate work order readiness."]

@@ -55,6 +55,7 @@ DEFAULT_CMMS_INTAKE_CONTRACT = {
         "confidence": {"type": ["number", "null"]},
         "submission": {"type": "object"},
         "request": {"type": "object"},
+        "metadata_review": {"type": "object"},
     },
     "additionalProperties": False,
 }

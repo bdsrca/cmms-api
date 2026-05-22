@@ -363,6 +363,22 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY(run_id) REFERENCES workflow_runs(run_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS intake_metadata_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL UNIQUE,
+        extracted_submission_json TEXT NOT NULL,
+        extracted_request_json TEXT NOT NULL,
+        reviewed_submission_json TEXT,
+        reviewed_request_json TEXT,
+        metadata_review_json TEXT,
+        reviewed_by_user_id INTEGER,
+        reviewed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES workflow_runs(run_id)
+    )
+    """,
 ]
 
 INDEX_STATEMENTS = [
@@ -370,6 +386,7 @@ INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_endpoint ON workflow_runs(endpoint)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_environment ON workflow_runs(environment_code)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run_id ON workflow_run_steps(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_intake_metadata_reviews_run_id ON intake_metadata_reviews(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_endpoint_status ON ai_prompt_versions(endpoint, status)",
     "CREATE INDEX IF NOT EXISTS idx_ai_test_cases_endpoint ON ai_test_cases(endpoint)",
     "CREATE INDEX IF NOT EXISTS idx_ai_test_cases_environment ON ai_test_cases(environment_code)",
