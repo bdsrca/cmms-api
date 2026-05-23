@@ -108,6 +108,12 @@ if (-not $env:LLM_API_KEY) {
     exit 1
 }
 
+if (-not $env:LOCAL_CONTROL_API_KEY) {
+    Write-Host "LOCAL_CONTROL_API_KEY is not set. Portal system controls will be disabled until it is set." -ForegroundColor Yellow
+    Write-Host '  $env:LOCAL_CONTROL_API_KEY="use-a-separate-local-control-key"' -ForegroundColor Yellow
+    Write-Log "local_control_api_key_missing"
+}
+
 if (-not $env:ADMIN_USERNAME -or -not $env:ADMIN_PASSWORD) {
     Write-Host "ADMIN_USERNAME and ADMIN_PASSWORD must be set before startup." -ForegroundColor Red
     Write-Host "Example:" -ForegroundColor Yellow

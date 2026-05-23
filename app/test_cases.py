@@ -98,12 +98,37 @@ def compare_test_case_result(expected_json: dict[str, Any] | None, actual_respon
         passed = passed and ok
         environment_result["expected_warnings"] = {"expected": sorted(expected_warnings), "actual": sorted(actual_warning_fields), "passed": ok}
 
+    review_result = {}
+    review = actual_response.get("review") if isinstance(actual_response.get("review"), dict) else {}
+    if "review_status" in expected:
+        actual = review.get("status")
+        ok = actual == expected["review_status"]
+        passed = passed and ok
+        review_result["status"] = {"expected": expected["review_status"], "actual": actual, "passed": ok}
+    if "review_human_review_recommended" in expected:
+        actual = review.get("human_review_recommended")
+        ok = actual == expected["review_human_review_recommended"]
+        passed = passed and ok
+        review_result["human_review_recommended"] = {
+            "expected": expected["review_human_review_recommended"],
+            "actual": actual,
+            "passed": ok,
+        }
+    expected_flags = [str(value) for value in expected.get("review_risk_flags_contains") or []]
+    if expected_flags:
+        actual_flags = [str(value) for value in review.get("risk_flags") or []] if isinstance(review.get("risk_flags"), list) else []
+        actual_lc = [value.lower() for value in actual_flags]
+        ok = all(any(expected_flag.lower() in actual_flag for actual_flag in actual_lc) for expected_flag in expected_flags)
+        passed = passed and ok
+        review_result["risk_flags_contains"] = {"expected": expected_flags, "actual": actual_flags, "passed": ok}
+
     return {
         "passed": passed,
         "field_results": field_results,
         "summary_results": summary_results,
         "contract_result": contract_result,
         "environment_result": environment_result,
+        "review_result": review_result,
         "summary": "All assertions passed." if passed else "One or more assertions failed.",
     }
 
@@ -218,6 +243,7 @@ def delete_test_case(test_case_id: int) -> dict[str, Any]:
 async def run_test_case_row(
     row: Any,
     prompt_id: int | None = None,
+    reviewer_prompt_id: int | None = None,
     environment_override: str | None = None,
     *,
     endpoint_runner: Callable[..., Awaitable[dict[str, Any]]],
@@ -230,7 +256,14 @@ async def run_test_case_row(
     environment_code = environment_override.upper() if environment_override else row["environment_code"]
     prompt_row = prompt_row_for(endpoint, prompt_id) if endpoint in supported_prompt_endpoints else None
     try:
-        actual = await endpoint_runner(endpoint, row["input_text"], environment_code, source="test_case", prompt_id=prompt_id)
+        actual = await endpoint_runner(
+            endpoint,
+            row["input_text"],
+            environment_code,
+            source="test_case",
+            prompt_id=prompt_id,
+            reviewer_prompt_id=reviewer_prompt_id,
+        )
         comparison = compare_test_case_result(json.loads(row["expected_json"]) if row["expected_json"] else None, actual)
         status = test_case_run_status(comparison)
         if status == "passed" and isinstance(actual.get("ai_validation"), dict) and actual["ai_validation"].get("warnings"):
@@ -282,7 +315,13 @@ async def run_test_case(
     row = get_test_case_row(test_case_id)
     if not row:
         raise HTTPException(status_code=404, detail="Test case not found")
-    return await run_test_case_row(row, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None, **runner_kwargs)
+    return await run_test_case_row(
+        row,
+        prompt_id=payload.prompt_id if payload else None,
+        reviewer_prompt_id=getattr(payload, "reviewer_prompt_id", None) if payload else None,
+        environment_override=payload.environment_code if payload else None,
+        **runner_kwargs,
+    )
 
 
 async def run_test_case_batch(payload: Any, **runner_kwargs: Any) -> dict[str, Any]:
@@ -298,7 +337,15 @@ async def run_test_case_batch(payload: Any, **runner_kwargs: Any) -> dict[str, A
         filters.append("enabled = 1")
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     rows = db_fetchall(f"SELECT * FROM ai_test_cases {where} ORDER BY id", tuple(params))
-    runs = [await run_test_case_row(row, prompt_id=payload.prompt_id, **runner_kwargs) for row in rows]
+    runs = [
+        await run_test_case_row(
+            row,
+            prompt_id=payload.prompt_id,
+            reviewer_prompt_id=getattr(payload, "reviewer_prompt_id", None),
+            **runner_kwargs,
+        )
+        for row in rows
+    ]
     summary = {"total": len(runs), "passed": 0, "failed": 0, "warning": 0, "error": 0, "runs": runs}
     for run in runs:
         summary[run["status"]] = summary.get(run["status"], 0) + 1
@@ -389,4 +436,10 @@ async def replay_workflow_run(run_id: str, payload: Any | None = None, **runner_
     )
     if not row:
         raise HTTPException(status_code=400, detail="This workflow run cannot be replayed because the original input text was not stored.")
-    return await run_test_case_row(row, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None, **runner_kwargs)
+    return await run_test_case_row(
+        row,
+        prompt_id=payload.prompt_id if payload else None,
+        reviewer_prompt_id=getattr(payload, "reviewer_prompt_id", None) if payload else None,
+        environment_override=payload.environment_code if payload else None,
+        **runner_kwargs,
+    )

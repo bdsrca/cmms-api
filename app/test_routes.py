@@ -26,6 +26,7 @@ from .test_suites import (
     delete_test_suite as delete_test_suite_helper,
     get_test_suite as get_test_suite_helper,
     get_test_suite_run as get_test_suite_run_helper,
+    ensure_safety_reviewer_smoke_suite as ensure_safety_reviewer_smoke_suite_helper,
     list_test_suite_runs as list_test_suite_runs_helper,
     list_test_suites as list_test_suites_helper,
     patch_test_suite as patch_test_suite_helper,
@@ -62,6 +63,7 @@ class TestCasePatchRequest(BaseModel):
 class TestCaseRunRequest(BaseModel):
     environment_code: str | None = None
     prompt_id: int | None = None
+    reviewer_prompt_id: int | None = None
 
 
 class TestCaseBatchRunRequest(BaseModel):
@@ -69,6 +71,7 @@ class TestCaseBatchRunRequest(BaseModel):
     environment_code: str | None = None
     enabled_only: bool = True
     prompt_id: int | None = None
+    reviewer_prompt_id: int | None = None
 
 
 class TestSuiteRequest(BaseModel):
@@ -105,6 +108,7 @@ class TestSuiteCaseRequest(BaseModel):
 
 class TestSuiteRunRequest(BaseModel):
     prompt_id: int | None = None
+    reviewer_prompt_id: int | None = None
     environment_code: str | None = None
 
 
@@ -112,8 +116,14 @@ class TestSuiteBatchRunRequest(BaseModel):
     endpoint: str | None = None
     environment_code: str | None = None
     prompt_id: int | None = None
+    reviewer_prompt_id: int | None = None
     required_only: bool = False
     enabled_only: bool = True
+
+
+class SafetyReviewerSmokeSuiteRequest(BaseModel):
+    environment_code: str | None = "DEFAULT"
+    required_for_promotion: bool = False
 
 
 class WorkflowRunCreateTestCaseRequest(BaseModel):
@@ -232,6 +242,17 @@ def build_test_router(
         if not item:
             raise HTTPException(status_code=404, detail="Test suite run not found")
         return item
+
+    @router.post("/api/admin/test-suites/safety-reviewer-smoke/ensure")
+    async def ensure_safety_reviewer_smoke_suite(
+        payload: SafetyReviewerSmokeSuiteRequest,
+        user: PortalUser = Depends(current_admin),
+    ) -> dict[str, Any]:
+        return ensure_safety_reviewer_smoke_suite_helper(
+            environment_code=payload.environment_code,
+            required_for_promotion=payload.required_for_promotion,
+            user=user,
+        )
 
     @router.get("/api/admin/test-suites/{suite_id}")
     async def get_test_suite(suite_id: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:

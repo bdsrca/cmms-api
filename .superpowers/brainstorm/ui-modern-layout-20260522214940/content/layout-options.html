@@ -1,0 +1,120 @@
+<h2>UI simplification direction</h2>
+<p class="subtitle">Goal: make each page easier to scan, less crowded, and a little more modern without changing backend behavior.</p>
+
+<div class="cards">
+  <div class="card" data-choice="quiet-density" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:260px;background:#f7f7f8;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#111827">
+        <div style="height:42px;background:white;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:12px">
+          <strong>CMMS LLM Portal</strong><span style="color:#6b7280">Healthy · Admin</span>
+        </div>
+        <div style="display:grid;grid-template-columns:168px 1fr;height:218px">
+          <div style="background:white;border-right:1px solid #e5e7eb;padding:10px">
+            <div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:8px 10px;font-size:11px;margin-bottom:6px">Dashboard</div>
+            <div style="color:#6b7280;padding:8px 10px;font-size:11px">Intake</div>
+            <div style="color:#6b7280;padding:8px 10px;font-size:11px">Prompts</div>
+            <div style="color:#6b7280;padding:8px 10px;font-size:11px">Regression</div>
+          </div>
+          <div style="padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <div><div style="font-size:19px;font-weight:700">Dashboard</div><div style="font-size:11px;color:#6b7280">Operational overview</div></div>
+              <button style="border:1px solid #d1d5db;background:white;border-radius:8px;padding:6px 10px;font-size:11px">Refresh</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px"><b>3</b><br><span style="font-size:10px;color:#6b7280">Environments</span></div>
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px"><b>12</b><br><span style="font-size:10px;color:#6b7280">API keys</span></div>
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px"><b>Admin</b><br><span style="font-size:10px;color:#6b7280">Role</span></div>
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px"><b>Local</b><br><span style="font-size:10px;color:#6b7280">Runtime</span></div>
+            </div>
+            <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:14px;font-size:11px;color:#374151">Safety posture and regression health remain as full-width sections.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Quiet Density</h3>
+      <p>Keep most controls visible, but improve spacing, headings, and card rhythm. Lowest risk, but still a bit busy on complex pages.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="recommended-progressive" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:260px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#0f172a">
+        <div style="height:44px;background:white;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px">
+          <strong>CMMS LLM Portal</strong><span style="color:#64748b">Healthy · Admin · Logout</span>
+        </div>
+        <div style="display:grid;grid-template-columns:176px 1fr;height:216px">
+          <div style="background:#fbfcfe;border-right:1px solid #e5e7eb;padding:12px">
+            <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;margin:4px 8px 8px">Operate</div>
+            <div style="background:#e0f2fe;color:#0369a1;border-radius:8px;padding:8px 10px;font-size:11px;margin-bottom:4px">Dashboard</div>
+            <div style="color:#64748b;padding:8px 10px;font-size:11px">Intake Review</div>
+            <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;margin:14px 8px 8px">Configure</div>
+            <div style="color:#64748b;padding:8px 10px;font-size:11px">Prompts</div>
+            <div style="color:#64748b;padding:8px 10px;font-size:11px">Tests</div>
+          </div>
+          <div style="padding:20px 24px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px">
+              <div><div style="font-size:22px;font-weight:760">Dashboard</div><div style="font-size:11px;color:#64748b;margin-top:3px">Overview first. Advanced controls stay inside page sections.</div></div>
+              <button style="border:1px solid #dbe3ef;background:white;border-radius:8px;padding:7px 11px;font-size:11px">Run check</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:14px">
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+                <div style="font-size:12px;font-weight:700;margin-bottom:10px">Readiness</div>
+                <div style="height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="height:8px;width:72%;background:#0ea5e9"></div></div>
+                <div style="margin-top:12px;font-size:11px;color:#64748b">Key metrics grouped into one readable panel.</div>
+              </div>
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+                <div style="font-size:12px;font-weight:700;margin-bottom:12px">Status</div>
+                <div style="display:flex;gap:8px;align-items:center;font-size:11px;margin-bottom:8px"><span style="width:8px;height:8px;border-radius:999px;background:#22c55e"></span>Advisory only</div>
+                <div style="display:flex;gap:8px;align-items:center;font-size:11px"><span style="width:8px;height:8px;border-radius:999px;background:#0ea5e9"></span>Local model</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px;font-size:11px;color:#475569">Secondary details are collapsed or grouped below the fold.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Progressive Console</h3>
+      <p>Recommended. Group pages into clearer zones, surface primary actions only, and move secondary controls into compact panels/details.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="wizard-focused" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:260px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#111827">
+        <div style="height:44px;background:white;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px">
+          <strong>Intake Review</strong><span style="color:#6b7280">Step 2 of 4</span>
+        </div>
+        <div style="padding:24px 34px">
+          <div style="display:flex;gap:8px;margin-bottom:22px">
+            <div style="height:5px;flex:1;background:#111827;border-radius:999px"></div>
+            <div style="height:5px;flex:1;background:#111827;border-radius:999px"></div>
+            <div style="height:5px;flex:1;background:#e5e7eb;border-radius:999px"></div>
+            <div style="height:5px;flex:1;background:#e5e7eb;border-radius:999px"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 260px;gap:18px">
+            <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:18px">
+              <div style="font-size:20px;font-weight:760;margin-bottom:8px">Review extracted fields</div>
+              <div style="font-size:12px;color:#6b7280;margin-bottom:18px">Only the fields needed for the current decision are shown.</div>
+              <div style="display:grid;gap:10px">
+                <div style="height:32px;background:#f3f4f6;border-radius:8px"></div>
+                <div style="height:32px;background:#f3f4f6;border-radius:8px"></div>
+                <div style="height:32px;background:#f3f4f6;border-radius:8px"></div>
+              </div>
+            </div>
+            <div style="background:#111827;color:white;border-radius:12px;padding:16px;font-size:11px">
+              <b>Decision summary</b>
+              <p style="color:#cbd5e1;line-height:1.5">One focused next action with review context.</p>
+              <button style="border:0;background:white;color:#111827;border-radius:8px;padding:8px 12px;font-size:11px;width:100%">Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Wizard Focus</h3>
+      <p>Strong simplification for review flows, but heavier behavioral change. Best later if we want to redesign workflows page by page.</p>
+    </div>
+  </div>
+</div>

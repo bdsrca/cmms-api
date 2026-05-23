@@ -1,6 +1,5 @@
 """Low-risk core and portal routes."""
 
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -38,7 +37,7 @@ async def me(user: PortalUser = Depends(current_user)) -> dict[str, Any]:
 
 @router.get("/api/default-api-key")
 async def default_api_key(user: PortalUser = Depends(current_user)) -> dict[str, str]:
-    return {"api_key": os.getenv("LLM_API_KEY", "my-secret-key")}
+    return {"api_key": ""}
 
 
 @router.get("/api/kb/status")

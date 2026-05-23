@@ -1,6 +1,7 @@
 """API key, settings, and local system/process route registration."""
 
 from collections.abc import Awaitable, Callable
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -20,11 +21,15 @@ from .security import PortalUser, current_admin, current_user
 class ApiKeyCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     owner: str | None = None
+    allowed_endpoints: list[str] | None = None
+    allowed_environments: list[str] | None = None
 
 
 class ApiKeyPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     enabled: bool | None = None
+    allowed_endpoints: list[str] | None = None
+    allowed_environments: list[str] | None = None
 
 
 class SettingPatchRequest(BaseModel):
@@ -43,6 +48,12 @@ def now_text() -> str:
     import time
 
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+async def maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 def build_management_router(
@@ -102,7 +113,7 @@ def build_management_router(
             service=SERVICE_NAME,
             model=MODEL_NAME,
             api_running=True,
-            ollama_running=await is_ollama_running(),
+            ollama_running=await maybe_await(is_ollama_running()),
             log_file=str(LOG_FILE),
         )
 
@@ -116,10 +127,10 @@ def build_management_router(
 
     @router.post("/api/system/ollama/start", dependencies=[Depends(require_local_control)])
     async def start_ollama(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
-        if await is_ollama_running():
+        if await maybe_await(is_ollama_running()):
             return {"status": "ok", "ollama_running": True, "message": "Ollama is already running"}
         start_ollama_process()
-        ollama_running = await wait_for_ollama()
+        ollama_running = await maybe_await(wait_for_ollama())
         if not ollama_running:
             raise HTTPException(status_code=500, detail="Ollama did not become ready after startup")
         return {"status": "ok", "ollama_running": True, "message": "Ollama started"}
@@ -127,7 +138,7 @@ def build_management_router(
     @router.post("/api/system/ollama/stop", dependencies=[Depends(require_local_control)])
     async def stop_ollama(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
         stop_ollama_process()
-        return {"status": "ok", "ollama_running": await is_ollama_running()}
+        return {"status": "ok", "ollama_running": await maybe_await(is_ollama_running())}
 
     @router.post("/api/system/shutdown", dependencies=[Depends(require_local_control)])
     async def shutdown_api(background_tasks: BackgroundTasks, user: PortalUser = Depends(current_admin)) -> dict[str, str]:

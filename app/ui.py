@@ -355,11 +355,12 @@ PORTAL_HTML = r"""<!doctype html>
   </div>
   <script>
     const state = {
-      me: null, page: "dashboard", envs: [], keys: [], output: {}, selectedEnv: "DEFAULT", defaultApiKey: "my-secret-key",
-      envTab: "codes", selectedCategory: "buildings", selectedCode: null, codeData: null, validationRules: [],
+      me: null, page: "dashboard", envs: [], keys: [], output: {}, selectedEnv: "DEFAULT", defaultApiKey: "",
+      envTab: "codes", selectedCategory: "buildings", selectedCode: null, codeData: null, validationRules: [], cmmsConnector: null, cmmsPushEvents: [],
       inputMode: "text", recognition: null, voiceSupported: null, voiceBaseTranscript: "", voiceFinalTranscript: "",
       voiceStopping: false, voiceStatus: "Idle", voiceSilenceTimer: null, outputs: {},
-      lastTestResponse: null, lastTestInput: null, metadataReviewExtracted: null, selectedTestCaseId: null
+      lastTestResponse: null, lastTestInput: null, metadataReviewExtracted: null, selectedTestCaseId: null,
+      reviewerPromptComparison: null, systemControlKey: ""
     };
     const menu = [
       ["dashboard","Dashboard",false,"▦"],["test","Test Console",false,"▶"],["email","Email Intake",false,"✉"],["builder","API Builder",false,"⌘"],["testCases","Test Cases",true,"✓"],["testSuites","Test Suites",true,"✓"],
@@ -398,8 +399,6 @@ PORTAL_HTML = r"""<!doctype html>
     async function refreshBase() {
       state.envs = await api("/api/environments").catch(() => []);
       state.keys = state.me?.role === "admin" ? await api("/api/admin/api-keys").catch(() => []) : [];
-      const keyInfo = await api("/api/default-api-key").catch(() => null);
-      if (keyInfo?.api_key) state.defaultApiKey = keyInfo.api_key;
       const health = await api("/health").catch(() => null);
       $("healthText").textContent = health ? "Local API online" : "API offline";
     }
@@ -489,7 +488,7 @@ PORTAL_HTML = r"""<!doctype html>
     function test() {
       pageShell("Test Console", `<div class="grid">
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Run console</div><div class="playground-subtitle">Text and voice.</div></div><span class="pill">API</span></div><div class="card-body stack">
-          <label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}">
+          <label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
           <label>Mode</label><select id="tEndpoint" onchange="renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select>
           <label>Environment</label><select id="tEnv">${envOptions()}</select>
           <div id="testModeHelp" class="notice"></div>
@@ -499,6 +498,7 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run CMMS Intake to evaluate whether enough validated information exists for a human-controlled workflow.</div></div>
             <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run CMMS Intake to extract metadata.</span></div></div>
+            <div class="ai-panel"><h3>Safety Review</h3><div id="tReview"><span class="muted">Run CMMS Intake to see advisory safety review.</span></div></div>
             <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">Run CMMS Intake to see trace steps.</span></div></div>
             <div class="result-grid">
               <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">Run a request to see contract validation.</span></div></div>
@@ -514,7 +514,7 @@ PORTAL_HTML = r"""<!doctype html>
     function emailIntake() {
       pageShell("Email Intake", `<div class="grid">
         <div class="card playground span-5"><div class="playground-header"><div><div class="playground-title">Email</div><div class="playground-subtitle">Paste or import.</div></div><span class="pill">email_api</span></div><div class="card-body stack">
-          <label>API key</label><input id="eKey" type="password" value="${escapeAttr(state.defaultApiKey)}">
+          <label>API key</label><input id="eKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
           <label>Environment</label><select id="eEnv">${envOptions()}</select>
           <div class="ai-panel stack email-compose">
             <label>From</label><input id="emailFrom" placeholder="tenant@example.com">
@@ -529,6 +529,7 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run Email to evaluate the request.</div></div>
             <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run Email to extract metadata.</span></div></div>
+            <div class="ai-panel"><h3>Safety Review</h3><div id="tReview"><span class="muted">Run Email to see advisory safety review.</span></div></div>
             <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">No run yet.</span></div></div>
             <div class="result-grid">
               <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">No run yet.</span></div></div>
@@ -764,6 +765,7 @@ PORTAL_HTML = r"""<!doctype html>
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
         renderIntakeMetadata(data);
+        renderSafetyReview(data.review);
         renderWorkflowTraceFromResponse(data, "tTrace");
       } catch (e) {
         if ($("runStatus")) $("runStatus").textContent = "Error";
@@ -809,6 +811,7 @@ PORTAL_HTML = r"""<!doctype html>
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
         renderIntakeMetadata(data);
+        renderSafetyReview(data.review);
         renderWorkflowTraceFromResponse(data, "tTrace");
         if (source === "voice_transcript") setVoiceStatus("Idle", "Voice transcript sent to the API.");
       } catch (e) {
@@ -945,6 +948,21 @@ PORTAL_HTML = r"""<!doctype html>
         <h3>Errors</h3>${issueList(validation.errors)}
         <h3>Warnings</h3>${issueList(validation.warnings)}
         <h3>Normalized</h3><pre style="min-height:100px">${JSON.stringify(validation.normalized || {}, null, 2)}</pre>`;
+    }
+
+    function renderSafetyReview(review) {
+      if (!$("tReview")) return;
+      if (!review) {
+        $("tReview").innerHTML = '<span class="muted">No safety review returned for this endpoint.</span>';
+        return;
+      }
+      const status = review.status || "unknown";
+      const cls = status === "pass" ? "ok" : status === "warning" || status === "skipped" ? "warning" : "danger";
+      $("tReview").innerHTML = `<div class="status-line"><span class="pill ${cls}">${escapeHtml(status)}</span><span class="muted">Source: ${escapeHtml(review.source || "safety_reviewer_agent")}</span></div>
+        <div style="margin-top:8px">Human review recommended: <strong>${review.human_review_recommended ? "Yes" : "No"}</strong></div>
+        <h3>Risk flags</h3>${issueList(review.risk_flags)}
+        <h3>Notes</h3>${issueList(review.notes)}
+        ${review.message ? `<p class="muted">${escapeHtml(review.message)}</p>` : ""}`;
     }
 
     async function renderWorkflowTraceFromResponse(data, targetId) {
@@ -1087,6 +1105,9 @@ PORTAL_HTML = r"""<!doctype html>
         work_order_type: response.result?.work_order_type ?? response.request_type ?? null,
         contract_valid: response.contract?.valid ?? null,
         environment_valid: response.ai_validation?.valid ?? null,
+        review_status: response.review?.status ?? null,
+        review_human_review_recommended: response.review?.human_review_recommended ?? null,
+        review_risk_flags_contains: response.review?.risk_flags?.length ? response.review.risk_flags : [],
         expected_errors: [],
         expected_warnings: []
       };
@@ -1131,6 +1152,7 @@ PORTAL_HTML = r"""<!doctype html>
         renderContractValidation(data.actual_json.contract);
         renderTestValidation(data.actual_json.ai_validation);
         renderReadiness(data.actual_json);
+        renderSafetyReview(data.actual_json.review);
         renderWorkflowTraceFromResponse(data.actual_json, "tTrace");
       }
     }
@@ -1282,7 +1304,7 @@ PORTAL_HTML = r"""<!doctype html>
       const runs = await api("/api/admin/test-suite-runs?limit=25").catch(() => []);
       pageShell("Test Suites", `<div class="grid">
         <div class="card span-8"><h2>Suites</h2><div class="card-body stack">
-          <div class="command-bar"><button onclick="newTestSuite()">New Suite</button><button class="secondary" onclick="runAllSuites()">Run Enabled Suites</button><button class="secondary" onclick="testSuites()">Refresh</button></div>
+          <div class="command-bar"><button onclick="newTestSuite()">New Suite</button><button class="secondary" onclick="ensureSafetyReviewerSmokeSuite()">Safety Reviewer Smoke Suite</button><button class="secondary" onclick="runAllSuites()">Run Enabled Suites</button><button class="secondary" onclick="testSuites()">Refresh</button></div>
           <div id="testSuiteTable">${renderTestSuitesTable(suites)}</div>
         </div></div>
         <div class="card span-4"><h2>Suite Detail</h2><div class="card-body stack detail-form" id="testSuiteDetail"><p class="muted">Select a suite or create a new one.</p></div></div>
@@ -1328,6 +1350,14 @@ PORTAL_HTML = r"""<!doctype html>
     }
 
     function newTestSuite() { renderTestSuiteEditor(null); }
+
+    async function ensureSafetyReviewerSmokeSuite() {
+      const env = window.prompt("Environment code", "DEFAULT");
+      if (env === null) return;
+      const suite = await api("/api/admin/test-suites/safety-reviewer-smoke/ensure", { method: "POST", body: JSON.stringify({ environment_code: env || "DEFAULT", required_for_promotion: false }) });
+      await testSuites();
+      await showTestSuiteDetail(suite.suite_id);
+    }
 
     async function showTestSuiteDetail(suiteId) {
       const suite = await api(`/api/admin/test-suites/${suiteId}`);
@@ -1396,7 +1426,7 @@ PORTAL_HTML = r"""<!doctype html>
       pageShell("API Call Builder", `<div class="grid">
         <div class="card span-4"><h2>Inputs</h2><div class="card-body stack">
           <label>Base URL</label><input id="bBase" value="${base}">
-          <label>API key</label><input id="bKey" value="${escapeAttr(state.defaultApiKey)}">
+          <label>API key</label><input id="bKey" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
           <label>Endpoint</label><select id="bEndpoint" onchange="buildCall()"><option value="cmms-intake">CMMS Intake</option><option value="intake/email">Email Intake</option><option value="cmms-assistant">CMMS Assistant</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select>
           <label>Environment</label><select id="bEnv" onchange="buildCall()">${envOptions()}</select>
           <label>Input source</label><select id="bSource" onchange="buildCall()"><option value="text">text</option><option value="voice_transcript">voice_transcript</option><option value="email_paste">email_paste</option><option value="email_mailbox">email_mailbox_reserved</option></select>
@@ -1490,6 +1520,8 @@ PORTAL_HTML = r"""<!doctype html>
       if (!state.envs.some(e => e.environment_code === state.selectedEnv)) state.selectedEnv = state.envs[0]?.environment_code || "DEFAULT";
       await loadEnvironmentCodes();
       await loadValidationRules();
+      await loadCmmsConnector();
+      await loadCmmsPushEvents();
       const env = state.envs.find(e => e.environment_code === state.selectedEnv) || {};
       pageShell("Environments", `<div class="resource-header">
         <div class="resource-title">Environment: ${env.environment_code || state.selectedEnv}</div>
@@ -1503,9 +1535,10 @@ PORTAL_HTML = r"""<!doctype html>
       <div class="tabs">
         <button class="${state.envTab==='codes'?'active':''}" onclick="state.envTab='codes'; renderEnvironmentTab()">Code Lists</button>
         <button class="${state.envTab==='validation'?'active':''}" onclick="state.envTab='validation'; renderEnvironmentTab()">Validation Rules</button>
+        <button class="${state.envTab==='connector'?'active':''}" onclick="state.envTab='connector'; renderEnvironmentTab()">CMMS Connector</button>
         <button disabled>Overview</button><button disabled>Test Console</button><button disabled>API Examples</button><button disabled>Usage Logs</button><button disabled>Settings</button>
       </div>
-      <div id="envTab">${state.envTab === 'validation' ? renderValidationRulesTab() : renderCodeListsTab()}</div>`);
+      <div id="envTab">${renderEnvironmentTabContent()}</div>`);
     }
     async function createEnv() {
       await api("/api/admin/environments", { method: "POST", body: JSON.stringify({ environment_code: $("envCode").value, name: $("envName").value, enabled: true }) });
@@ -1527,8 +1560,106 @@ PORTAL_HTML = r"""<!doctype html>
       state.validationRules = await api(`/api/environments/${state.selectedEnv}/validation-rules`).catch(() => []);
     }
 
+    async function loadCmmsConnector() {
+      state.cmmsConnector = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector`).catch(() => ({ configured: false, secret_configured: false }));
+    }
+
+    async function loadCmmsPushEvents() {
+      state.cmmsPushEvents = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector/push-events`).catch(() => []);
+    }
+
     function renderEnvironmentTab() {
-      $("envTab").innerHTML = state.envTab === "validation" ? renderValidationRulesTab() : renderCodeListsTab();
+      $("envTab").innerHTML = renderEnvironmentTabContent();
+    }
+
+    function renderEnvironmentTabContent() {
+      if (state.envTab === "validation") return renderValidationRulesTab();
+      if (state.envTab === "connector") return renderCmmsConnectorTab();
+      return renderCodeListsTab();
+    }
+
+    function renderCmmsConnectorTab() {
+      const c = state.cmmsConnector || {};
+      return `<div class="card"><h2>CMMS Connector</h2><div class="card-body">
+        <div class="metadata-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:start">
+          <div><label>Endpoint URL</label><input id="cmmsEndpoint" value="${escapeAttr(c.endpoint_url || "")}" placeholder="https://cmms.example/api/work-orders"></div>
+          <div><label>Auth Type</label><select id="cmmsAuthType"><option value="bearer" ${c.auth_type !== "header" ? "selected" : ""}>Bearer Token</option><option value="header" ${c.auth_type === "header" ? "selected" : ""}>Custom Header</option></select></div>
+          <div><label>Header Name</label><input id="cmmsHeaderName" value="${escapeAttr(c.auth_header_name || "X-API-Key")}"></div>
+          <div><label>Secret</label><input id="cmmsSecret" type="password" placeholder="${c.secret_configured ? "Configured - leave blank to keep" : "Required"}"></div>
+          <div><label>Timeout Seconds</label><input id="cmmsTimeout" type="number" min="1" max="30" value="${escapeAttr(c.timeout_seconds || 5)}"></div>
+          <div><label>HTTP Method</label><select id="cmmsMethod"><option value="POST" ${(c.http_method || "POST") === "POST" ? "selected" : ""}>POST</option><option value="PUT" ${c.http_method === "PUT" ? "selected" : ""}>PUT</option><option value="PATCH" ${c.http_method === "PATCH" ? "selected" : ""}>PATCH</option></select></div>
+          <div><label>Success Status Codes</label><input id="cmmsSuccessCodes" value="${escapeAttr(c.success_status_codes || "200,201,202")}"></div>
+          <div><label>External ID Path</label><input id="cmmsExternalPath" value="${escapeAttr(c.external_id_path || "")}" placeholder="id or data.workOrder.id"></div>
+          <div><label>Payload Root Key</label><input id="cmmsPayloadRoot" value="${escapeAttr(c.payload_root_key || "")}" placeholder="workOrder"></div>
+          <div><label>Static Headers JSON</label><textarea id="cmmsStaticHeaders" rows="3" placeholder='{"Tenant-ID":"north"}'>${escapeHtml(JSON.stringify(c.static_headers || {}, null, 2))}</textarea></div>
+          <div><label>Auto-push Note</label><textarea id="cmmsNote" rows="3">${escapeHtml(c.auto_push_note || "")}</textarea></div>
+          <label><input id="cmmsEnabled" type="checkbox" ${c.enabled ? "checked" : ""}> Enabled</label>
+          <label><input id="cmmsAutoPush" type="checkbox" ${c.auto_push_enabled ? "checked" : ""}> Auto-push</label>
+          <label><input id="cmmsDryRun" type="checkbox" ${c.dry_run_enabled ? "checked" : ""}> Dry run</label>
+          <label><input id="cmmsRequireReview" type="checkbox" ${c.require_metadata_review ? "checked" : ""}> Require metadata review</label>
+        </div>
+        <div class="command-bar" style="margin-top:12px">
+          <button onclick="saveCmmsConnector()">Save</button>
+          <button class="secondary" onclick="testCmmsConnector()">Validate</button>
+          <button class="secondary" onclick="probeCmmsConnector()">Probe</button>
+          <span class="pill ${c.secret_configured ? "ok" : "warning"}">Secret ${c.secret_configured ? "configured" : "missing"}</span>
+        </div>
+        <pre id="cmmsConnectorOut" style="min-height:80px">${escapeHtml(JSON.stringify(c, null, 2))}</pre>
+        <h2 style="margin-top:14px">Recent Push Events</h2>
+        <div id="cmmsPushEvents">${renderCmmsPushEvents()}</div>
+      </div></div>`;
+    }
+
+    function renderCmmsPushEvents() {
+      const rows = state.cmmsPushEvents || [];
+      if (!rows.length) return `<p class="muted">No CMMS push events recorded for this environment.</p>`;
+      return `<table><thead><tr><th>Time</th><th>Status</th><th>Run</th><th>HTTP</th><th>External Ref</th><th>Blocked Reasons</th></tr></thead><tbody>${rows.map(r => `
+        <tr><td>${escapeHtml(r.created_at || "")}</td><td><span class="pill ${r.status === "sent" ? "ok" : r.status === "failed" ? "danger" : "warning"}">${escapeHtml(r.status || "")}</span></td><td>${escapeHtml(r.run_id || "")}</td><td>${r.status_code ?? ""}</td><td>${escapeHtml(r.external_reference || "")}</td><td>${escapeHtml((r.blocked_reasons || []).join(", "))}</td></tr>
+      `).join("")}</tbody></table>`;
+    }
+
+    async function saveCmmsConnector() {
+      const secret = $("cmmsSecret").value.trim();
+      let staticHeaders = {};
+      try {
+        staticHeaders = JSON.parse($("cmmsStaticHeaders").value || "{}");
+      } catch (e) {
+        $("cmmsConnectorOut").textContent = `Invalid Static Headers JSON: ${e.message}`;
+        return;
+      }
+      const payload = {
+        enabled: $("cmmsEnabled").checked,
+        auto_push_enabled: $("cmmsAutoPush").checked,
+        endpoint_url: $("cmmsEndpoint").value.trim(),
+        auth_type: $("cmmsAuthType").value,
+        auth_header_name: $("cmmsHeaderName").value.trim(),
+        timeout_seconds: Number($("cmmsTimeout").value || 5),
+        http_method: $("cmmsMethod").value,
+        success_status_codes: $("cmmsSuccessCodes").value.trim(),
+        external_id_path: $("cmmsExternalPath").value.trim(),
+        dry_run_enabled: $("cmmsDryRun").checked,
+        require_metadata_review: $("cmmsRequireReview").checked,
+        static_headers: staticHeaders,
+        payload_root_key: $("cmmsPayloadRoot").value.trim(),
+        auto_push_note: $("cmmsNote").value.trim()
+      };
+      if (secret) payload.secret_value = secret;
+      state.cmmsConnector = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector`, { method: "PUT", body: JSON.stringify(payload) });
+      await loadCmmsPushEvents();
+      $("cmmsConnectorOut").textContent = JSON.stringify(state.cmmsConnector, null, 2);
+      renderEnvironmentTab();
+    }
+
+    async function testCmmsConnector() {
+      const result = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector/test`, { method: "POST" });
+      $("cmmsConnectorOut").textContent = JSON.stringify(result, null, 2);
+    }
+
+    async function probeCmmsConnector() {
+      const result = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector/probe`, { method: "POST" });
+      await loadCmmsPushEvents();
+      $("cmmsConnectorOut").textContent = JSON.stringify(result, null, 2);
+      if ($("cmmsPushEvents")) $("cmmsPushEvents").innerHTML = renderCmmsPushEvents();
     }
 
     function currentCodeRows() {
@@ -1824,6 +1955,7 @@ PORTAL_HTML = r"""<!doctype html>
         <label>Sample input</label><textarea id="promptSample">The air conditioner in ARC room 205 is making loud noise and the room is too warm.</textarea>
         <label>Environment</label><select id="promptEnv">${envOptions()}</select>
         <div class="row"><button onclick="savePrompt(${prompt.id})" ${readonly}>Save</button><button class="secondary" onclick="createPromptDraft(${prompt.id})">Create Draft from This</button><button class="secondary" onclick="testPrompt(${prompt.id})">Test Draft</button><button class="secondary" onclick="runPromptTestCases(${prompt.id}, '${escapeAttr(prompt.endpoint)}')">Run Test Cases Against This Prompt</button><button class="secondary" onclick="runPromptSuites(${prompt.id}, '${escapeAttr(prompt.endpoint)}', true)">Run Required Test Suites Against This Prompt</button><button class="secondary" onclick="runPromptSuites(${prompt.id}, '${escapeAttr(prompt.endpoint)}', false)">Run All Test Suites Against This Prompt</button><button class="secondary" onclick="comparePromptAgainstActive(${prompt.id}, '${escapeAttr(prompt.endpoint)}')">Compare Against Active</button><button class="secondary" onclick="comparePromptAgainstAnother(${prompt.id}, '${escapeAttr(prompt.endpoint)}')">Compare Against Another Prompt</button><button class="danger" onclick="archivePrompt(${prompt.id})">Archive</button></div>
+        ${renderReviewerPromptTuningPanel(prompt)}
         <div class="ai-panel stack">
           <h3>Promotion Readiness</h3>
           <div class="muted">Activation requires a completed comparison against the current active prompt with no regressions or errors.</div>
@@ -1833,6 +1965,17 @@ PORTAL_HTML = r"""<!doctype html>
           <div id="promotionGateResult" class="readiness warn"><strong>Gate status</strong><div class="muted">Select or enter a comparison id, then check readiness.</div></div>
         </div>
         <div class="ai-panel ai-panel-dark"><div class="status-line"><strong>Prompt test output</strong>${outputToolbar("promptResult")}</div><pre id="promptResult" style="min-height:160px">{}</pre></div>`;
+    }
+
+    function renderReviewerPromptTuningPanel(prompt) {
+      if (prompt.endpoint !== "cmms-intake-reviewer") return "";
+      return `<div class="ai-panel stack">
+          <div class="status-line"><h3>Safety Reviewer Smoke Suite</h3><span class="pill">active reviewer prompt</span></div>
+          <p class="muted">Creates or runs the reviewer smoke suite using the current intake workflow. Draft reviewer prompts can be tested through admin-only suite runs without changing the live intake API.</p>
+          <div class="button-grid"><button class="secondary" onclick="ensureReviewerSmokeSuiteFromPrompt()">Create / Refresh Smoke Suite</button><button onclick="runReviewerSmokeSuiteFromPrompt(${prompt.id})">Run Safety Reviewer Smoke Suite</button><button class="secondary" onclick="compareReviewerPromptAgainstActive(${prompt.id})">Compare Active vs This Prompt</button></div>
+          <div id="reviewerSmokeStatus" class="readiness warn"><strong>Smoke suite status</strong><div class="muted">Create or run the suite to see status.</div></div>
+          <div id="reviewerPromotionPreview" class="readiness warn"><strong>Promotion preview</strong><div class="muted">Run an active-vs-candidate comparison to prepare an audited override reason if needed.</div></div>
+        </div>`;
     }
 
     async function savePrompt(id) {
@@ -1863,6 +2006,112 @@ PORTAL_HTML = r"""<!doctype html>
     async function runPromptSuites(promptId, endpoint, requiredOnly) {
       const data = await api("/api/admin/test-suites/run-batch", { method: "POST", body: JSON.stringify({ endpoint, prompt_id: promptId, required_only: requiredOnly, enabled_only: true }) });
       setConsoleOutput("promptResult", data);
+    }
+
+    async function ensureReviewerSmokeSuiteFromPrompt() {
+      const env = $("promptEnv")?.value || "DEFAULT";
+      const suite = await api("/api/admin/test-suites/safety-reviewer-smoke/ensure", { method: "POST", body: JSON.stringify({ environment_code: env, required_for_promotion: false }) });
+      setConsoleOutput("promptResult", suite);
+      if ($("reviewerSmokeStatus")) {
+        $("reviewerSmokeStatus").className = "readiness";
+        $("reviewerSmokeStatus").innerHTML = `<strong>Smoke suite ready</strong><div class="muted">${escapeHtml(suite.name || "Safety Reviewer Smoke Suite")} in ${escapeHtml(suite.environment_code || env)}. Cases: ${(suite.cases || []).length}</div>`;
+      }
+      return suite;
+    }
+
+    async function runReviewerSmokeSuiteFromPrompt(reviewerPromptId) {
+      const suite = await ensureReviewerSmokeSuiteFromPrompt();
+      const data = await api("/api/admin/test-suites/suite_safety_reviewer_smoke/run", { method: "POST", body: JSON.stringify({ environment_code: suite.environment_code || $("promptEnv")?.value || "DEFAULT", reviewer_prompt_id: reviewerPromptId }) });
+      setConsoleOutput("promptResult", data);
+      if ($("reviewerSmokeStatus")) {
+        const summary = data.summary || {};
+        $("reviewerSmokeStatus").className = `readiness ${data.status === "passed" ? "" : data.status === "warning" ? "warn" : "fail"}`;
+        $("reviewerSmokeStatus").innerHTML = `<strong>Last run: ${escapeHtml(data.status || "unknown")}</strong><div class="muted">Pass rate: ${summary.pass_rate ?? "n/a"}; passed ${summary.passed ?? 0}/${summary.total ?? 0}; suite run ${escapeHtml(data.suite_run_id || "")}</div>`;
+      }
+      return data;
+    }
+
+    async function compareReviewerPromptAgainstActive(reviewerPromptId) {
+      const prompts = await api("/api/admin/prompt-versions/cmms-intake-reviewer");
+      const active = prompts.find(p => p.status === "active");
+      if (!active) { alert("No active reviewer prompt found."); return; }
+      const suite = await ensureReviewerSmokeSuiteFromPrompt();
+      const env = suite.environment_code || $("promptEnv")?.value || "DEFAULT";
+      const baseline = await api("/api/admin/test-suites/suite_safety_reviewer_smoke/run", { method: "POST", body: JSON.stringify({ environment_code: env, "reviewer_prompt_id": active.id }) });
+      const candidate = await api("/api/admin/test-suites/suite_safety_reviewer_smoke/run", { method: "POST", body: JSON.stringify({ environment_code: env, "reviewer_prompt_id": reviewerPromptId }) });
+      const comparison = renderReviewerPromptCompareSummary(active, reviewerPromptId, baseline, candidate);
+      state.reviewerPromptComparison = comparison;
+      setConsoleOutput("promptResult", comparison);
+      if ($("reviewerSmokeStatus")) {
+        const regressed = comparison.regressed > 0 || comparison.candidate.status === "error";
+        $("reviewerSmokeStatus").className = `readiness ${regressed ? "fail" : comparison.candidate.status === "warning" ? "warn" : ""}`;
+        $("reviewerSmokeStatus").innerHTML = `<strong>Reviewer prompt comparison: ${regressed ? "regression found" : "no regression"}</strong><div class="muted">Baseline ${escapeHtml(comparison.baseline.status)} vs candidate ${escapeHtml(comparison.candidate.status)}. Passed ${comparison.baseline.passed} -> ${comparison.candidate.passed}.</div>`;
+      }
+      renderReviewerPromotionPreview(comparison);
+      return comparison;
+    }
+
+    function renderReviewerPromptCompareSummary(activePrompt, candidatePromptId, baselineRun, candidateRun) {
+      const baselineSummary = baselineRun.summary || {};
+      const candidateSummary = candidateRun.summary || {};
+      const baselinePassed = Number(baselineSummary.passed || 0);
+      const candidatePassed = Number(candidateSummary.passed || 0);
+      const baselineErrors = Number(baselineSummary.error || 0);
+      const candidateErrors = Number(candidateSummary.error || 0);
+      const regressed = candidateErrors > baselineErrors || candidatePassed < baselinePassed ? 1 : 0;
+      const improved = candidateErrors < baselineErrors || candidatePassed > baselinePassed ? 1 : 0;
+      return {
+        type: "Reviewer prompt comparison",
+        persisted: false,
+        baseline: {
+          prompt_id: activePrompt.id,
+          prompt_version: activePrompt.version,
+          suite_run_id: baselineRun.suite_run_id,
+          status: baselineRun.status,
+          passed: baselinePassed,
+          error: baselineErrors,
+          pass_rate: baselineSummary.pass_rate ?? null,
+        },
+        candidate: {
+          prompt_id: candidatePromptId,
+          suite_run_id: candidateRun.suite_run_id,
+          status: candidateRun.status,
+          passed: candidatePassed,
+          error: candidateErrors,
+          pass_rate: candidateSummary.pass_rate ?? null,
+        },
+        improved,
+        regressed,
+        unchanged: improved === 0 && regressed === 0,
+      };
+    }
+
+    function renderReviewerPromotionPreview(comparison) {
+      const target = $("reviewerPromotionPreview");
+      if (!target) return;
+      const regressed = comparison.regressed > 0 || comparison.candidate.status === "error";
+      target.className = `readiness ${regressed ? "fail" : ""}`;
+      if (regressed) {
+        target.innerHTML = `<strong>Promotion preview blocked</strong><div class="muted">Regression or error found in reviewer smoke preview. Do not use override unless a human has reviewed the failure.</div>`;
+        return;
+      }
+      target.innerHTML = `<strong>Preview passed; activation still requires admin override</strong>
+        <div class="muted">Reviewer smoke preview found no regression. Use this only to prefill an override reason; the promotion gate remains authoritative.</div>
+        <div class="row" style="margin-top:8px"><button class="secondary" onclick="useReviewerPreviewForPromotion()">Use Preview as Override Reason</button></div>`;
+    }
+
+    function useReviewerPreviewForPromotion() {
+      const comparison = state.reviewerPromptComparison;
+      if (!comparison || comparison.regressed > 0 || comparison.candidate.status === "error") {
+        alert("Run a reviewer prompt comparison with no regressions first.");
+        return;
+      }
+      const reason = `Reviewer smoke preview passed: baseline suite_run_id ${comparison.baseline.suite_run_id || "n/a"}, candidate suite_run_id ${comparison.candidate.suite_run_id || "n/a"}, no regression. Override used because reviewer prompt comparisons are preview-only in v1.`;
+      if ($("promotionOverrideReason")) $("promotionOverrideReason").value = reason;
+      if ($("promotionGateResult")) {
+        $("promotionGateResult").className = "readiness warn";
+        $("promotionGateResult").innerHTML = `<strong>Override reason prepared</strong><div class="muted">${escapeHtml(reason)}</div>`;
+      }
     }
 
     async function comparePromptAgainstActive(candidatePromptId, endpoint) {
@@ -2003,12 +2252,50 @@ PORTAL_HTML = r"""<!doctype html>
     async function keys() {
       const data = await api("/api/admin/api-keys");
       pageShell("API Keys", `<div class="grid">
-        <div class="card span-4"><h2>Generate key</h2><div class="card-body stack"><label>Name</label><input id="kName" value="external-tester"><button onclick="createKey()">Generate</button></div></div>
-        <div class="card span-8"><h2>Keys</h2><div class="card-body">${table(data, ["key_id","name","enabled","usage_count","last_used_at"], "disableKey")}</div></div>
+        <div class="card span-4"><h2>Generate key</h2><div class="card-body stack">
+          <label>Name</label><input id="kName" value="external-tester">
+          <label>Allowed endpoints</label><textarea id="kAllowedEndpoints" rows="4" placeholder="cmms-intake, summarize-work-order, extract-work-order-fields, cmms-assistant, intake/email">cmms-intake</textarea>
+          <div class="muted">Blank means all controlled AI endpoints.</div>
+          <label>Allowed environments</label><input id="kAllowedEnvironments" value="DEFAULT" placeholder="DEFAULT, TEST">
+          <div class="muted">Blank means all environments.</div>
+          <button onclick="createKey()">Generate</button>
+        </div></div>
+        <div class="card span-8"><h2>Keys</h2><div class="card-body">${renderApiKeyTable(data)}</div></div>
         <div class="card span-12"><h2>Generated key output</h2><pre id="kOut">{}</pre></div>
       </div>`);
     }
-    async function createKey() { const data = await api("/api/admin/api-keys", { method: "POST", body: JSON.stringify({ name: $("kName").value }) }); $("kOut").textContent = JSON.stringify(data, null, 2); }
+    function csvList(value) {
+      return String(value || "").split(/[,\n]/).map(v => v.trim()).filter(Boolean);
+    }
+    function scopeLabel(values) {
+      const list = Array.isArray(values) ? values : [];
+      return list.length ? list.map(v => `<span class="pill">${escapeHtml(v)}</span>`).join(" ") : '<span class="muted">All</span>';
+    }
+    function renderApiKeyTable(rows) {
+      if (!rows || !rows.length) return "<p class='muted'>No records.</p>";
+      return `<table><thead><tr><th>Key</th><th>Name</th><th>Status</th><th>Endpoints</th><th>Environments</th><th>Usage</th><th>Last Used</th><th>Action</th></tr></thead><tbody>${rows.map(r => `<tr>
+        <td>${escapeHtml(r.key_id)}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td><span class="pill ${r.enabled ? "ok" : "danger"}">${r.enabled ? "enabled" : "disabled"}</span></td>
+        <td>${scopeLabel(r.allowed_endpoints)}</td>
+        <td>${scopeLabel(r.allowed_environments)}</td>
+        <td>${r.usage_count ?? 0}</td>
+        <td>${escapeHtml(r.last_used_at || "")}</td>
+        <td><button class="danger" onclick="disableKey('${escapeAttr(r.key_id)}')">Disable</button></td>
+      </tr>`).join("")}</tbody></table>`;
+    }
+    async function createKey() {
+      const data = await api("/api/admin/api-keys", {
+        method: "POST",
+        body: JSON.stringify({
+          name: $("kName").value,
+          allowed_endpoints: csvList($("kAllowedEndpoints").value),
+          allowed_environments: csvList($("kAllowedEnvironments").value)
+        })
+      });
+      await keys();
+      $("kOut").textContent = JSON.stringify(data, null, 2);
+    }
     async function disableKey(id) { await api(`/api/admin/api-keys/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: false }) }); keys(); }
     async function users() {
       const data = await api("/api/admin/users");
@@ -2043,9 +2330,28 @@ PORTAL_HTML = r"""<!doctype html>
     async function remote() { const data = await api("/api/admin/settings/remote_access_url").catch(()=>({ value:"" })); pageShell("Remote Access", `<div class="card"><h2>Remote link notes</h2><div class="card-body stack"><input id="remoteUrl" value="${data.value||""}" placeholder="https://example.trycloudflare.com"><button onclick="saveRemote()">Save</button><p class="muted">Cloudflare is still started manually. Store the URL here for reference.</p></div></div>`); }
     async function saveRemote() { await api("/api/admin/settings/remote_access_url", { method: "PATCH", body: JSON.stringify({ value: $("remoteUrl").value }) }); remote(); }
     async function system() {
-      const s = await api("/api/system/status");
-      pageShell("System", `<div class="grid"><div class="card span-6"><h2>Status</h2><div class="card-body"><pre>${JSON.stringify(s, null, 2)}</pre></div></div>
-      <div class="card span-6"><h2>Local-only controls</h2><div class="card-body row"><button onclick="api('/api/system/ollama/start',{method:'POST'}).then(system)">Start Ollama</button><button class="secondary" onclick="api('/api/system/ollama/stop',{method:'POST'}).then(system)">Stop Ollama</button><button class="danger" onclick="api('/api/system/shutdown',{method:'POST'})">Stop API</button></div></div></div>`);
+      pageShell("System", `<div class="grid"><div class="card span-6"><h2>Status</h2><div class="card-body stack"><label>Local control API key</label><input id="systemKey" type="password" value="${escapeAttr(state.systemControlKey)}" placeholder="Paste generated API key"><button class="secondary" onclick="loadSystemStatus()">Refresh Status</button><pre id="systemStatusOut">{ "status": "Local system controls require an API key and admin session." }</pre></div></div>
+      <div class="card span-6"><h2>Local-only controls</h2><div class="card-body row"><button onclick="systemApi('/api/system/ollama/start',{method:'POST'}).then(loadSystemStatus)">Start Ollama</button><button class="secondary" onclick="systemApi('/api/system/ollama/stop',{method:'POST'}).then(loadSystemStatus)">Stop Ollama</button><button class="danger" onclick="systemApi('/api/system/shutdown',{method:'POST'})">Stop API</button></div></div></div>`);
+    }
+
+    function systemHeaders() {
+      state.systemControlKey = $("systemKey")?.value || state.systemControlKey || "";
+      return { "x-api-key": state.systemControlKey };
+    }
+
+    async function systemApi(path, opts = {}) {
+      return api(path, { ...opts, headers: { ...systemHeaders(), ...(opts.headers || {}) } });
+    }
+
+    async function loadSystemStatus() {
+      const target = $("systemStatusOut");
+      if (!target) return;
+      try {
+        const s = await systemApi("/api/system/status");
+        target.textContent = JSON.stringify(s, null, 2);
+      } catch (e) {
+        target.textContent = JSON.stringify(e.data || { detail: e.message }, null, 2);
+      }
     }
     function table(rows, cols, action) {
       if (!rows || !rows.length) return "<p class='muted'>No records.</p>";

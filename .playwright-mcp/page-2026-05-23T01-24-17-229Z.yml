@@ -1,0 +1,8 @@
+- generic [ref=e3]:
+  - heading "CMMS LLM Portal" [level=1] [ref=e4]
+  - paragraph [ref=e5]: Sign in to manage environments, API keys, reports, and testing.
+  - generic [ref=e6]: Username
+  - textbox [ref=e7]: admin
+  - generic [ref=e8]: Password
+  - textbox "Enter admin password" [ref=e9]
+  - button "Sign in" [ref=e11] [cursor=pointer]

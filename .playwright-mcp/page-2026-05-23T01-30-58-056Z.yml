@@ -1,0 +1,131 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: CMMS LLM Management Portal
+    - generic [ref=e5]:
+      - generic [ref=e6]: Local API online
+      - generic [ref=e7]: admin (admin)
+      - button "Logout" [ref=e8] [cursor=pointer]
+  - navigation [ref=e9]:
+    - button "▦ Dashboard" [ref=e134] [cursor=pointer]:
+      - generic [ref=e135]: ▦
+      - generic [ref=e136]: Dashboard
+    - button "▶ Test Console" [ref=e137] [cursor=pointer]:
+      - generic [ref=e138]: ▶
+      - generic [ref=e139]: Test Console
+    - button "✉ Email Intake" [ref=e140] [cursor=pointer]:
+      - generic [ref=e141]: ✉
+      - generic [ref=e142]: Email Intake
+    - button "⌘ API Builder" [ref=e143] [cursor=pointer]:
+      - generic [ref=e144]: ⌘
+      - generic [ref=e145]: API Builder
+    - button "✓ Test Cases ●" [ref=e146] [cursor=pointer]:
+      - generic [ref=e147]: ✓
+      - generic [ref=e148]: Test Cases
+      - text: ●
+    - button "✓ Test Suites ●" [ref=e149] [cursor=pointer]:
+      - generic [ref=e150]: ✓
+      - generic [ref=e151]: Test Suites
+      - text: ●
+    - button "◇ Environments ●" [ref=e152] [cursor=pointer]:
+      - generic [ref=e153]: ◇
+      - generic [ref=e154]: Environments
+      - text: ●
+    - button "▣ Output Contracts ●" [ref=e155] [cursor=pointer]:
+      - generic [ref=e156]: ▣
+      - generic [ref=e157]: Output Contracts
+      - text: ●
+    - button "✎ Prompt Versions ●" [ref=e158] [cursor=pointer]:
+      - generic [ref=e159]: ✎
+      - generic [ref=e160]: Prompt Versions
+      - text: ●
+    - button "◆ API Keys ●" [ref=e161] [cursor=pointer]:
+      - generic [ref=e162]: ◆
+      - generic [ref=e163]: API Keys
+      - text: ●
+    - button "◉ Users ●" [ref=e164] [cursor=pointer]:
+      - generic [ref=e165]: ◉
+      - generic [ref=e166]: Users
+      - text: ●
+    - button "☰ Logs" [ref=e167] [cursor=pointer]:
+      - generic [ref=e168]: ☰
+      - generic [ref=e169]: Logs
+    - button "↗ Reports" [ref=e170] [cursor=pointer]:
+      - generic [ref=e171]: ↗
+      - generic [ref=e172]: Reports
+    - button "◌ Knowledge Base" [ref=e173] [cursor=pointer]:
+      - generic [ref=e174]: ◌
+      - generic [ref=e175]: Knowledge Base
+    - button "⇄ Remote Access ●" [ref=e176] [cursor=pointer]:
+      - generic [ref=e177]: ⇄
+      - generic [ref=e178]: Remote Access
+      - text: ●
+    - button "⚙ System ●" [ref=e179] [cursor=pointer]:
+      - generic [ref=e180]: ⚙
+      - generic [ref=e181]: System
+      - text: ●
+  - main [ref=e58]:
+    - heading "Environments" [level=1] [ref=e182]
+    - generic [ref=e61]:
+      - generic [ref=e183]:
+        - generic [ref=e184]: "Environment: DEFAULT"
+        - generic [ref=e185]: "Status: Enabled Model: qwen3:8b Base URL: local Updated: 2026-05-18T15:21:16Z"
+      - generic [ref=e186]:
+        - generic [ref=e187]: Environment
+        - combobox [ref=e188]:
+          - option "AB1779154320 - AB Smoke 1779154320"
+          - option "AB1779154381 - AB Smoke 1779154381"
+          - option "DEFAULT - Default local test" [selected]
+          - option "MOD1779156384 - Mod Smoke"
+          - option "PG1779154809 - Promotion Gate Smoke 1779154809"
+          - option "PG1779154930 - Promotion Gate Smoke 1779154930"
+          - option "RD1779156124 - Regression Dashboard Smoke"
+          - option "SMKC15221 - Smoke SMKC15221"
+          - option "SMOKE - Smoke Test"
+          - option "TEST - Test Environment"
+          - option "TS1779155620 - Suite Smoke"
+          - option "V2G330147 - Smoke v2G Updated"
+          - option "V3C333423 - Smoke v3C Updated"
+          - option "V3D333765 - Smoke v3D"
+        - button "Create environment" [ref=e189] [cursor=pointer]
+        - button "Refresh" [ref=e190] [cursor=pointer]
+      - generic [ref=e191]:
+        - button "Code Lists" [ref=e192] [cursor=pointer]
+        - button "Validation Rules" [ref=e193] [cursor=pointer]
+        - button "CMMS Connector" [ref=e194] [cursor=pointer]
+        - button "Overview" [disabled] [ref=e195]
+        - button "Test Console" [disabled] [ref=e196]
+        - button "API Examples" [disabled] [ref=e197]
+        - button "Usage Logs" [disabled] [ref=e198]
+        - button "Settings" [disabled] [ref=e199]
+      - generic [ref=e302]:
+        - heading "CMMS Connector" [level=2] [ref=e303]
+        - generic [ref=e304]:
+          - generic [ref=e305]:
+            - generic [ref=e306]:
+              - generic [ref=e307]: Endpoint URL
+              - textbox "https://cmms.example/api/work-orders" [ref=e308]: http://localhost:9999/cmms/work-orders
+            - generic [ref=e309]:
+              - generic [ref=e310]: Auth Type
+              - combobox [ref=e311]:
+                - option "Bearer Token" [selected]
+                - option "Custom Header"
+            - generic [ref=e312]:
+              - generic [ref=e313]: Header Name
+              - textbox [ref=e314]: X-API-Key
+            - generic [ref=e315]:
+              - generic [ref=e316]: Secret
+              - textbox "Configured - leave blank to keep" [ref=e317]
+            - generic [ref=e318]:
+              - generic [ref=e319]: Timeout Seconds
+              - spinbutton [ref=e320]: "3"
+            - generic [ref=e321]:
+              - checkbox "Enabled" [checked] [ref=e322]
+              - text: Enabled
+            - generic [ref=e323]:
+              - checkbox "Auto-push" [ref=e324]
+              - text: Auto-push
+          - generic [ref=e325]:
+            - button "Save" [ref=e326] [cursor=pointer]
+            - button "Validate" [active] [ref=e327] [cursor=pointer]
+            - generic [ref=e328]: Secret configured
+          - generic [ref=e329]: "{ \"status\": \"skipped\", \"blocked_reasons\": [ \"auto_push_disabled\" ], \"connector\": { \"configured\": true, \"environment_code\": \"DEFAULT\", \"enabled\": true, \"auto_push_enabled\": false, \"endpoint_url\": \"http://localhost:9999/cmms/work-orders\", \"auth_type\": \"bearer\", \"auth_header_name\": \"X-API-Key\", \"timeout_seconds\": 3, \"secret_configured\": true, \"created_at\": \"2026-05-23T01:30:26Z\", \"updated_at\": \"2026-05-23T01:30:26Z\" } }"

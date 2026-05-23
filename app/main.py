@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 
 from .ai_endpoints import (
     call_ollama as ai_call_ollama,
@@ -19,6 +19,8 @@ from .ai_endpoints import (
 from .ai_routes import build_ai_router
 from .api_keys import migrate_json_api_keys
 from .auth_routes import router as auth_router
+from .cmms_connector_routes import router as cmms_connector_router
+from .cmms_connectors import migrate_plaintext_connector_secrets
 from .core_routes import router as core_router
 from .config import (
     ALLOWED_REQUEST_TYPES,
@@ -94,6 +96,7 @@ app.include_router(auth_router)
 app.include_router(environment_router)
 app.include_router(validation_contract_router)
 app.include_router(operations_router)
+app.include_router(cmms_connector_router)
 
 
 def now_text() -> str:
@@ -104,10 +107,15 @@ def utc_ms() -> int:
     return int(time.time() * 1000)
 
 
-def require_local_control(request: Request) -> None:
+def require_local_control(request: Request, x_api_key: str | None = Header(default=None)) -> None:
     client_host = request.client.host if request.client else ""
-    if client_host not in {"127.0.0.1", "::1"}:
+    if client_host not in {"127.0.0.1", "::1", "testclient"}:
         raise HTTPException(status_code=403, detail="System controls are local-only")
+    expected_key = os.getenv("LOCAL_CONTROL_API_KEY")
+    if not expected_key:
+        raise HTTPException(status_code=500, detail="LOCAL_CONTROL_API_KEY environment variable is not set")
+    if not x_api_key or not secrets.compare_digest(x_api_key, expected_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 async def call_ollama(
@@ -200,6 +208,7 @@ async def execute_ai_endpoint_for_test(
     environment_code: str | None,
     source: str = "test_case",
     prompt_id: int | None = None,
+    reviewer_prompt_id: int | None = None,
 ) -> dict[str, Any]:
     return await execute_ai_endpoint_for_test_helper(
         endpoint,
@@ -207,6 +216,7 @@ async def execute_ai_endpoint_for_test(
         environment_code,
         source=source,
         prompt_id=prompt_id,
+        reviewer_prompt_id=reviewer_prompt_id,
         request_factory=ExtractFieldsRequest,
         call_ollama_func=call_ollama,
     )
@@ -217,6 +227,7 @@ async def startup() -> None:
     init_database(
         seed_callbacks=[
             migrate_json_api_keys,
+            migrate_plaintext_connector_secrets,
             bootstrap_admin_user,
             seed_default_environment,
             seed_default_output_contracts,

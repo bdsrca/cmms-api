@@ -33,11 +33,13 @@ def build_test_runner_callbacks(
     async def run_test_case_row_for_prompt_comparison(
         row: Any,
         prompt_id: int | None = None,
+        reviewer_prompt_id: int | None = None,
         environment_override: str | None = None,
     ) -> dict[str, Any]:
         return await run_test_case_row(
             row,
             prompt_id=prompt_id,
+            reviewer_prompt_id=reviewer_prompt_id,
             environment_override=environment_override,
             **test_case_runner_kwargs(),
         )

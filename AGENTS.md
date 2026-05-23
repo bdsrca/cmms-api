@@ -26,13 +26,13 @@ This project uses a deterministic workflow-based multi-agent design. It is not a
 
 ## Safety Boundaries
 
-- No agent can write to CMMS directly.
-- No agent can create work orders automatically.
+- No LLM or agent can write to CMMS directly.
+- Backend CMMS connector code may auto-push to a configured CMMS API only after deterministic server-side validation gates pass, the safety reviewer returns pass, handoff readiness is ready, and the environment connector explicitly enables auto-push.
 - No agent can approve requests.
 - No agent can send emails automatically.
 - The API must not expose Ollama directly.
 - The API must not add a generic `/chat` endpoint.
-- First version is advisory and draft-only.
+- AI extraction and drafting remain advisory. Any CMMS push must be performed only by the controlled connector gate and must be traceable.
 - All model output must be validated by deterministic server-side rules before use.
 
 ## Operator UI
@@ -42,7 +42,7 @@ This project uses a deterministic workflow-based multi-agent design. It is not a
 - The UI must call only the controlled advisory endpoints.
 - Server-side validation remains authoritative.
 - Cloudflare Tunnel must stay a manual operator action unless this policy is explicitly changed.
-- Local process controls must require `x-api-key` and local client access.
+- Local process controls must require `x-api-key` using `LOCAL_CONTROL_API_KEY`, local client access, and an authenticated admin portal session.
 - Logs must not record API keys or full secrets.
 - Generated API keys must be stored hashed, never plaintext.
 - API key management and process start/stop controls require an authenticated admin portal session.

@@ -62,6 +62,7 @@ DEFAULT_CMMS_INTAKE_CONTRACT = {
 
 SUPPORTED_PROMPT_ENDPOINTS = {
     "cmms-intake",
+    "cmms-intake-reviewer",
     "summarize-work-order",
     "extract-work-order-fields",
     "cmms-assistant",
@@ -150,5 +151,23 @@ DEFAULT_PROMPT_VERSIONS = {
             indent=2,
         ),
         "user_template": "{{text}}",
+    },
+    "cmms-intake-reviewer": {
+        "version": "v1",
+        "name": "Default safety reviewer prompt",
+        "temperature": 0.1,
+        "system_prompt": (
+            "/no_think\n"
+            "You are a Safety Reviewer Agent for a controlled CMMS intake workflow. "
+            "Return JSON only with this shape: "
+            "{\"status\":\"pass\",\"human_review_recommended\":false,\"risk_flags\":[],\"notes\":[]}. "
+            "Allowed status values are pass, warning, and fail. "
+            "Review for advisory safety risk, missing information, contradictions, unsafe promises, "
+            "or over-confident draft language. "
+            "Do not change extracted fields, normalized codes, validation results, drafts, or response shape. "
+            "Do not claim that a work order was created. Do not approve, dispatch, write to CMMS, or send email. "
+            "Keep risk_flags and notes concise."
+        ),
+        "user_template": "{{context_json}}",
     },
 }

@@ -6,13 +6,16 @@ from typing import Any, Awaitable, Callable
 import httpx
 from fastapi import HTTPException
 
+from .cmms_connectors import auto_push_cmms_payload
 from .config import ADVISORY_WARNING, ALLOWED_REQUEST_TYPES, MODEL_NAME, OLLAMA_CHAT_URL
 from .db import db_execute
 from .environments import get_environment_values
+from .intake_handoff import build_canonical_cmms_payload_preview, build_environment_handoff_preview
 from .intake_metadata import build_intake_metadata, extract_metadata_from_text, unreviewed_metadata_review
 from .intake_metadata_reviews import save_extracted_metadata_review
 from .output_contracts import skipped_ai_validation, validate_output_contract
 from .prompts import intake_prompt_messages, prompt_messages
+from .safety_reviewer import run_safety_reviewer_agent, skipped_reviewer_block
 from .validation_rules import validate_ai_output
 from .workflow_trace import (
     fail_workflow_step,
@@ -23,6 +26,35 @@ from .workflow_trace import (
 )
 
 OllamaCaller = Callable[..., Awaitable[str]]
+
+
+def build_cmms_intake_push_result(
+    *,
+    run_id: str,
+    environment_code: str | None,
+    payload: dict[str, Any],
+    contract_valid: bool,
+    ai_validation: dict[str, Any],
+    validation: dict[str, Any],
+    review: dict[str, Any],
+    metadata_review: dict[str, Any] | None = None,
+    sender: Any = None,
+) -> dict[str, Any]:
+    env_code = str(environment_code or "").strip().upper()
+    canonical_preview = build_canonical_cmms_payload_preview(payload, run_id)
+    environment_preview = build_environment_handoff_preview(canonical_preview, env_code)
+    push_context = {
+        "contract_valid": bool(contract_valid),
+        "ai_validation_valid": ai_validation.get("valid") is True,
+        "can_create_work_order": bool(validation.get("can_create_work_order")),
+        "human_review_required": bool(validation.get("needs_human_review")) or bool(review.get("human_review_recommended")),
+        "review_passed": review.get("status") == "pass",
+        "metadata_reviewed": bool((metadata_review or {}).get("reviewed")),
+        "handoff_status": (environment_preview or {}).get("status"),
+    }
+    result = auto_push_cmms_payload(env_code, canonical_preview, push_context, sender=sender)
+    result["handoff_status"] = push_context["handoff_status"]
+    return result
 
 
 def normalize_allowed_values(values: list[str]) -> list[str]:
@@ -267,6 +299,7 @@ async def execute_ai_endpoint_for_test(
     environment_code: str | None,
     source: str = "test_case",
     prompt_id: int | None = None,
+    reviewer_prompt_id: int | None = None,
     request_factory: Callable[..., Any] | None = None,
     call_ollama_func: OllamaCaller = call_ollama,
 ) -> dict[str, Any]:
@@ -309,7 +342,13 @@ async def execute_ai_endpoint_for_test(
     if request_factory is None:
         raise HTTPException(status_code=500, detail="Missing request factory")
     payload = request_factory(text=input_text, environment_code=environment_code, source=source)
-    return await cmms_intake(payload, source=source, prompt_id=prompt_id, call_ollama_func=call_ollama_func)
+    return await cmms_intake(
+        payload,
+        source=source,
+        prompt_id=prompt_id,
+        reviewer_prompt_id=reviewer_prompt_id,
+        call_ollama_func=call_ollama_func,
+    )
 
 
 async def cmms_intake(
@@ -319,6 +358,7 @@ async def cmms_intake(
     api_key_id: str | None = None,
     source: str | None = None,
     prompt_id: int | None = None,
+    reviewer_prompt_id: int | None = None,
     call_ollama_func: OllamaCaller = call_ollama,
 ) -> dict[str, Any]:
     env_hint = payload.environment_code.upper() if payload.environment_code else None
@@ -492,12 +532,80 @@ async def cmms_intake(
             )
             current_step = None
 
-        current_step = start_workflow_step(run_id, "response_composed", 50)
         drafts = {
             "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
             "internal_note": str(draft_data.get("internal_note") or "Validated intake. Ready for human review or controlled CMMS workflow."),
             "client_reply": str(draft_data.get("client_reply") or "Thanks, we captured your request."),
         }
+
+        current_step = start_workflow_step(
+            run_id,
+            "safety_reviewer_agent",
+            45,
+            input_summary=f"contract_valid={contract_validation['valid']}",
+        )
+        if contract_validation["valid"]:
+            review, reviewer_prompt_meta = await run_safety_reviewer_agent(
+                result=contract_validation["normalized_payload"],
+                contract=contract_block,
+                ai_validation=ai_validation,
+                drafts=drafts,
+                call_ollama_func=call_ollama_func,
+                prompt_id=reviewer_prompt_id,
+            )
+            db_execute(
+                "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
+                (
+                    reviewer_prompt_meta["model"],
+                    f"{reviewer_prompt_meta['prompt_id']}:{reviewer_prompt_meta['prompt_version']}",
+                    current_step,
+                ),
+            )
+            reviewer_status = "failed" if review["status"] == "fail" else ("warning" if review["status"] == "warning" else "passed")
+            finish_workflow_step(
+                current_step,
+                reviewer_status,
+                output_summary=f"review_status={review['status']} flags={len(review['risk_flags'])} notes={len(review['notes'])}",
+                output_json={
+                    "status": review["status"],
+                    "human_review_recommended": review["human_review_recommended"],
+                    "risk_flag_count": len(review["risk_flags"]),
+                    "note_count": len(review["notes"]),
+                    "prompt_id": reviewer_prompt_meta["prompt_id"],
+                    "prompt_version": reviewer_prompt_meta["prompt_version"],
+                },
+            )
+        else:
+            review = skipped_reviewer_block("Skipped because output contract validation failed.")
+            finish_workflow_step(
+                current_step,
+                "skipped",
+                output_summary=review["message"],
+                output_json={"status": review["status"], "enabled": review["enabled"]},
+            )
+        current_step = None
+
+        current_step = start_workflow_step(run_id, "cmms_auto_push", 48, input_summary=f"environment={env_code or 'none'}")
+        cmms_push = build_cmms_intake_push_result(
+            run_id=run_id,
+            environment_code=env_code,
+            payload=contract_validation["normalized_payload"] if contract_validation["valid"] else result_payload,
+            contract_valid=contract_validation["valid"],
+            ai_validation=ai_validation,
+            validation=validation,
+            review=review,
+            metadata_review=metadata_review,
+        )
+        push_step_status = "passed" if cmms_push["status"] in {"sent", "skipped"} else ("warning" if cmms_push["status"] == "blocked" else "failed")
+        finish_workflow_step(
+            current_step,
+            push_step_status,
+            output_summary=f"cmms_push={cmms_push['status']}",
+            output_json=cmms_push,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(run_id, "response_composed", 50)
         run_status = "failed" if not contract_validation["valid"] else ("completed_with_warnings" if ai_validation.get("warnings") else "completed")
         finish_workflow_step(current_step, "passed", output_summary=f"run_status={run_status}")
         current_step = None
@@ -510,6 +618,8 @@ async def cmms_intake(
             "contract": contract_block,
             "result": contract_validation["normalized_payload"] if contract_validation["valid"] else result_payload,
             "ai_validation": ai_validation,
+            "review": review,
+            "cmms_push": cmms_push,
             "submission": metadata["submission"],
             "request": metadata["request"],
             "metadata_review": metadata_review,

@@ -11,7 +11,7 @@ from .ai_endpoints import (
     extract_work_order_fields as extract_work_order_fields_helper,
     summarize_work_order as summarize_work_order_helper,
 )
-from .api_keys import require_api_key
+from .api_keys import enforce_api_key_scope, require_api_key
 from .email_intake import build_email_intake_text
 
 
@@ -37,6 +37,7 @@ def build_ai_router(
         dependencies=[Depends(require_api_key)],
     )
     async def summarize_work_order(request: Request, payload: TextRequest) -> Any:
+        enforce_api_key_scope(request, "summarize-work-order", payload.environment_code)
         if payload.environment_code:
             request.state.environment_code = payload.environment_code
         return await summarize_work_order_helper(payload, call_ollama_func=call_ollama)
@@ -47,6 +48,7 @@ def build_ai_router(
         dependencies=[Depends(require_api_key)],
     )
     async def cmms_assistant(request: Request, payload: TextRequest) -> Any:
+        enforce_api_key_scope(request, "cmms-assistant", payload.environment_code)
         if payload.environment_code:
             request.state.environment_code = payload.environment_code
         return await cmms_assistant_helper(payload, call_ollama_func=call_ollama)
@@ -57,6 +59,7 @@ def build_ai_router(
         dependencies=[Depends(require_api_key)],
     )
     async def extract_work_order_fields(request: Request, payload: ExtractFieldsRequest) -> Any:
+        enforce_api_key_scope(request, "extract-work-order-fields", payload.environment_code)
         result = await extract_work_order_fields_helper(payload, call_ollama_func=call_ollama)
         env_code = result.pop("_environment_code", None)
         if env_code:
@@ -69,6 +72,7 @@ def build_ai_router(
         dependencies=[Depends(require_api_key)],
     )
     async def cmms_intake(request: Request, payload: ExtractFieldsRequest) -> Any:
+        enforce_api_key_scope(request, "cmms-intake", payload.environment_code)
         result = await cmms_intake_helper(
             payload,
             user_id=getattr(request.state, "user_id", None),
@@ -85,6 +89,7 @@ def build_ai_router(
         dependencies=[Depends(require_api_key)],
     )
     async def email_intake(request: Request, payload: EmailIntakeRequest) -> Any:
+        enforce_api_key_scope(request, "intake/email", payload.environment_code)
         text = build_email_intake_text(
             from_email=payload.from_email,
             to_email=payload.to_email,

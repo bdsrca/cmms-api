@@ -78,7 +78,9 @@ SCHEMA_STATEMENTS = [
         owner TEXT,
         created_at TEXT NOT NULL,
         last_used_at TEXT,
-        usage_count INTEGER NOT NULL DEFAULT 0
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        allowed_endpoints_json TEXT,
+        allowed_environments_json TEXT
     )
     """,
     """
@@ -88,6 +90,44 @@ SCHEMA_STATEMENTS = [
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cmms_connectors (
+        environment_code TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        auto_push_enabled INTEGER NOT NULL DEFAULT 0,
+        endpoint_url TEXT,
+        auth_type TEXT NOT NULL DEFAULT 'bearer',
+        auth_header_name TEXT,
+        secret_value TEXT,
+        timeout_seconds INTEGER NOT NULL DEFAULT 5,
+        http_method TEXT NOT NULL DEFAULT 'POST',
+        success_status_codes TEXT NOT NULL DEFAULT '200,201,202',
+        external_id_path TEXT,
+        dry_run_enabled INTEGER NOT NULL DEFAULT 0,
+        require_metadata_review INTEGER NOT NULL DEFAULT 0,
+        static_headers_json TEXT,
+        payload_root_key TEXT,
+        auto_push_note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(environment_code) REFERENCES environments(environment_code)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cmms_push_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        run_id TEXT,
+        environment_code TEXT NOT NULL,
+        status TEXT NOT NULL,
+        blocked_reasons_json TEXT,
+        status_code INTEGER,
+        external_reference TEXT,
+        message TEXT,
+        connector_enabled INTEGER NOT NULL DEFAULT 0,
+        auto_push_enabled INTEGER NOT NULL DEFAULT 0
     )
     """,
     """
@@ -386,6 +426,8 @@ INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_endpoint ON workflow_runs(endpoint)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_environment ON workflow_runs(environment_code)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run_id ON workflow_run_steps(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_cmms_push_events_environment ON cmms_push_events(environment_code, id)",
+    "CREATE INDEX IF NOT EXISTS idx_cmms_push_events_run_id ON cmms_push_events(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_intake_metadata_reviews_run_id ON intake_metadata_reviews(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_endpoint_status ON ai_prompt_versions(endpoint, status)",
     "CREATE INDEX IF NOT EXISTS idx_ai_test_cases_endpoint ON ai_test_cases(endpoint)",
@@ -429,6 +471,28 @@ def ensure_schema_columns(conn: sqlite3.Connection) -> None:
         if column not in columns:
             conn.execute(statement)
     conn.execute("UPDATE code_values SET updated_at = COALESCE(updated_at, created_at, ?)", (now_text(),))
+    cmms_columns = {row["name"] for row in conn.execute("PRAGMA table_info(cmms_connectors)").fetchall()}
+    cmms_migrations = {
+        "http_method": "ALTER TABLE cmms_connectors ADD COLUMN http_method TEXT NOT NULL DEFAULT 'POST'",
+        "success_status_codes": "ALTER TABLE cmms_connectors ADD COLUMN success_status_codes TEXT NOT NULL DEFAULT '200,201,202'",
+        "external_id_path": "ALTER TABLE cmms_connectors ADD COLUMN external_id_path TEXT",
+        "dry_run_enabled": "ALTER TABLE cmms_connectors ADD COLUMN dry_run_enabled INTEGER NOT NULL DEFAULT 0",
+        "require_metadata_review": "ALTER TABLE cmms_connectors ADD COLUMN require_metadata_review INTEGER NOT NULL DEFAULT 0",
+        "static_headers_json": "ALTER TABLE cmms_connectors ADD COLUMN static_headers_json TEXT",
+        "payload_root_key": "ALTER TABLE cmms_connectors ADD COLUMN payload_root_key TEXT",
+        "auto_push_note": "ALTER TABLE cmms_connectors ADD COLUMN auto_push_note TEXT",
+    }
+    for column, statement in cmms_migrations.items():
+        if column not in cmms_columns:
+            conn.execute(statement)
+    api_key_columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_keys)").fetchall()}
+    api_key_migrations = {
+        "allowed_endpoints_json": "ALTER TABLE api_keys ADD COLUMN allowed_endpoints_json TEXT",
+        "allowed_environments_json": "ALTER TABLE api_keys ADD COLUMN allowed_environments_json TEXT",
+    }
+    for column, statement in api_key_migrations.items():
+        if column not in api_key_columns:
+            conn.execute(statement)
 
 
 def init_db(seed_callbacks: list[Callable[[], None]] | None = None) -> None:

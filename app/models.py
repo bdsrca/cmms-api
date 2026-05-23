@@ -78,6 +78,7 @@ class IntakeResponse(BaseModel):
     contract: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     ai_validation: dict[str, Any] | None = None
+    review: dict[str, Any] | None = None
     submission: dict[str, Any] | None = None
     request: dict[str, Any] | None = None
     metadata_review: dict[str, Any] | None = None

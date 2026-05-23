@@ -11,6 +11,9 @@ from fastapi import HTTPException
 from .db import db_execute, db_fetchall, db_fetchone
 
 
+SAFETY_REVIEWER_SMOKE_SUITE_ID = "suite_safety_reviewer_smoke"
+
+
 def now_text() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -35,6 +38,174 @@ def suite_row_or_404(suite_id: str) -> Any:
     if not row:
         raise HTTPException(status_code=404, detail="Test suite not found")
     return row
+
+
+def safety_reviewer_smoke_definitions(environment_code: str | None = "DEFAULT", required_for_promotion: bool = False) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    env = (environment_code or "DEFAULT").upper()
+    suite = {
+        "suite_id": SAFETY_REVIEWER_SMOKE_SUITE_ID,
+        "name": "Safety Reviewer Smoke Suite",
+        "endpoint": "cmms-intake",
+        "environment_code": env,
+        "description": "Basic reviewer regression examples. Only the stable pass case is enabled by default; warning examples are templates for operator tuning.",
+        "enabled": True,
+        "required_for_promotion": bool(required_for_promotion),
+        "min_pass_rate": 1.0,
+        "zero_regression_required": True,
+        "zero_error_required": True,
+        "tags": "safety-reviewer,smoke",
+    }
+    cases = [
+        {
+            "name": "Safety reviewer normal HVAC pass",
+            "endpoint": "cmms-intake",
+            "environment_code": env,
+            "input_text": "The air conditioner in ARC room 205 is making loud noise and the room is too warm.",
+            "source": "safety_reviewer_smoke",
+            "expected_json": {
+                "building": "ARC",
+                "room": "205",
+                "review_status": "pass",
+                "review_human_review_recommended": False,
+                "review_risk_flags_contains": [],
+            },
+            "enabled": True,
+            "tags": "safety-reviewer,smoke,pass",
+            "notes": "Stable reviewer smoke case enabled by default.",
+        },
+        {
+            "name": "Safety reviewer missing location warning template",
+            "endpoint": "cmms-intake",
+            "environment_code": env,
+            "input_text": "The room is too hot.",
+            "source": "safety_reviewer_smoke",
+            "expected_json": {
+                "review_status": "warning",
+                "review_human_review_recommended": True,
+            },
+            "enabled": False,
+            "tags": "safety-reviewer,smoke,warning-template",
+            "notes": "Disabled template. Enable after confirming local reviewer prompt behavior.",
+        },
+        {
+            "name": "Safety reviewer urgent leak warning template",
+            "endpoint": "cmms-intake",
+            "environment_code": env,
+            "input_text": "There is a water leak in ARC room 205. It looks urgent.",
+            "source": "safety_reviewer_smoke",
+            "expected_json": {
+                "building": "ARC",
+                "room": "205",
+                "review_status": "warning",
+                "review_human_review_recommended": True,
+            },
+            "enabled": False,
+            "tags": "safety-reviewer,smoke,warning-template",
+            "notes": "Disabled template for reviewer tuning around urgent language.",
+        },
+    ]
+    return suite, cases
+
+
+def ensure_safety_reviewer_smoke_suite(environment_code: str | None, required_for_promotion: bool, user: Any) -> dict[str, Any]:
+    suite_def, case_defs = safety_reviewer_smoke_definitions(environment_code, required_for_promotion)
+    timestamp = now_text()
+    created_cases = 0
+    linked_cases = 0
+
+    suite_row = db_fetchone("SELECT * FROM ai_test_suites WHERE suite_id = ?", (SAFETY_REVIEWER_SMOKE_SUITE_ID,))
+    if suite_row:
+        db_execute(
+            """
+            UPDATE ai_test_suites
+            SET environment_code = ?, required_for_promotion = ?, updated_at = ?, updated_by = ?
+            WHERE suite_id = ?
+            """,
+            (
+                suite_def["environment_code"],
+                1 if suite_def["required_for_promotion"] else 0,
+                timestamp,
+                getattr(user, "user_id", None),
+                SAFETY_REVIEWER_SMOKE_SUITE_ID,
+            ),
+        )
+    else:
+        db_execute(
+            """
+            INSERT INTO ai_test_suites
+            (suite_id, name, endpoint, environment_code, description, enabled, required_for_promotion,
+             min_pass_rate, zero_regression_required, zero_error_required, tags, created_at, updated_at, created_by, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                suite_def["suite_id"],
+                suite_def["name"],
+                suite_def["endpoint"],
+                suite_def["environment_code"],
+                suite_def["description"],
+                1,
+                1 if suite_def["required_for_promotion"] else 0,
+                suite_def["min_pass_rate"],
+                1,
+                1,
+                suite_def["tags"],
+                timestamp,
+                timestamp,
+                getattr(user, "user_id", None),
+                getattr(user, "user_id", None),
+            ),
+        )
+
+    for index, case_def in enumerate(case_defs, start=1):
+        case_row = db_fetchone(
+            "SELECT id FROM ai_test_cases WHERE name = ? AND endpoint = ? AND environment_code = ?",
+            (case_def["name"], case_def["endpoint"], case_def["environment_code"]),
+        )
+        if not case_row:
+            db_execute(
+                """
+                INSERT INTO ai_test_cases
+                (name, endpoint, environment_code, input_text, source, expected_json, enabled, tags, notes, created_at, updated_at, created_by, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    case_def["name"],
+                    case_def["endpoint"],
+                    case_def["environment_code"],
+                    case_def["input_text"],
+                    case_def["source"],
+                    safe_json(case_def["expected_json"]),
+                    1 if case_def["enabled"] else 0,
+                    case_def["tags"],
+                    case_def["notes"],
+                    timestamp,
+                    timestamp,
+                    getattr(user, "user_id", None),
+                    getattr(user, "user_id", None),
+                ),
+            )
+            created_cases += 1
+            case_row = db_fetchone(
+                "SELECT id FROM ai_test_cases WHERE name = ? AND endpoint = ? AND environment_code = ? ORDER BY id DESC",
+                (case_def["name"], case_def["endpoint"], case_def["environment_code"]),
+            )
+        if not case_row:
+            continue
+        link = db_fetchone(
+            "SELECT id FROM ai_test_suite_cases WHERE suite_id = ? AND test_case_id = ?",
+            (SAFETY_REVIEWER_SMOKE_SUITE_ID, case_row["id"]),
+        )
+        if not link:
+            db_execute(
+                "INSERT INTO ai_test_suite_cases (suite_id, test_case_id, sort_order, enabled) VALUES (?, ?, ?, 1)",
+                (SAFETY_REVIEWER_SMOKE_SUITE_ID, case_row["id"], index),
+            )
+            linked_cases += 1
+
+    suite = get_test_suite(SAFETY_REVIEWER_SMOKE_SUITE_ID)
+    suite["created_cases"] = created_cases
+    suite["linked_cases"] = linked_cases
+    return suite
 
 
 def suite_status_from_summary(summary: dict[str, Any]) -> str:
@@ -80,6 +251,7 @@ def suite_summary_from_runs(runs: list[dict[str, Any]], suite: Any) -> dict[str,
 async def run_test_suite_row(
     suite: Any,
     prompt_id: int | None = None,
+    reviewer_prompt_id: int | None = None,
     environment_override: str | None = None,
     user_id: int | None = None,
     *,
@@ -106,7 +278,13 @@ async def run_test_suite_row(
     )
     runs = []
     for case in case_rows:
-        run = await run_test_case_row(case, prompt_id=prompt_id, environment_override=environment_code, **test_case_runner_kwargs)
+        run = await run_test_case_row(
+            case,
+            prompt_id=prompt_id,
+            reviewer_prompt_id=reviewer_prompt_id,
+            environment_override=environment_code,
+            **test_case_runner_kwargs,
+        )
         runs.append(run)
         db_execute(
             """
@@ -225,7 +403,17 @@ async def run_test_suite_batch(payload: Any, user: Any, **suite_runner_kwargs: A
         filters.append("enabled = 1")
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     rows = db_fetchall(f"SELECT * FROM ai_test_suites {where} ORDER BY id", tuple(params))
-    runs = [await run_test_suite_row(row, prompt_id=payload.prompt_id, environment_override=payload.environment_code, user_id=user.user_id, **suite_runner_kwargs) for row in rows]
+    runs = [
+        await run_test_suite_row(
+            row,
+            prompt_id=payload.prompt_id,
+            reviewer_prompt_id=getattr(payload, "reviewer_prompt_id", None),
+            environment_override=payload.environment_code,
+            user_id=user.user_id,
+            **suite_runner_kwargs,
+        )
+        for row in rows
+    ]
     summary: dict[str, Any] = {"total_suites": len(runs), "passed": 0, "failed": 0, "warning": 0, "error": 0, "runs": runs}
     for run in runs:
         status = run["status"]
@@ -367,4 +555,11 @@ def remove_test_suite_case(suite_id: str, test_case_id: int) -> dict[str, Any]:
 
 async def run_test_suite(suite_id: str, payload: Any | None = None, user: Any | None = None, **suite_runner_kwargs: Any) -> dict[str, Any]:
     suite = suite_row_or_404(suite_id)
-    return await run_test_suite_row(suite, prompt_id=payload.prompt_id if payload else None, environment_override=payload.environment_code if payload else None, user_id=user.user_id if user else None, **suite_runner_kwargs)
+    return await run_test_suite_row(
+        suite,
+        prompt_id=payload.prompt_id if payload else None,
+        reviewer_prompt_id=getattr(payload, "reviewer_prompt_id", None) if payload else None,
+        environment_override=payload.environment_code if payload else None,
+        user_id=user.user_id if user else None,
+        **suite_runner_kwargs,
+    )
