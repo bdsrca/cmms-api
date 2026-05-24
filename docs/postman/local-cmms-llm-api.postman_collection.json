@@ -1,0 +1,401 @@
+{
+  "info": {
+    "name": "Local CMMS LLM API",
+    "description": "Postman collection for the local CMMS LLM API. AI endpoints use x-api-key. Admin/operator endpoints use an authenticated portal session cookie.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "llm_api_key",
+      "value": "replace-with-generated-ai-key"
+    },
+    {
+      "key": "admin_cookie",
+      "value": "portal_session=replace-with-admin-session-cookie"
+    },
+    {
+      "key": "environment_code",
+      "value": "DEFAULT"
+    },
+    {
+      "key": "endpoint",
+      "value": "cmms-intake"
+    },
+    {
+      "key": "key_id",
+      "value": "1"
+    },
+    {
+      "key": "contract_id",
+      "value": "1"
+    },
+    {
+      "key": "run_id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health and Portal",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "GET /ui",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/ui"
+          }
+        },
+        {
+          "name": "GET /api/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Endpoints",
+      "item": [
+        {
+          "name": "POST /api/ai/cmms-intake",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{llm_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The air conditioner in ARC room 205 is making loud noise.\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"text\"\n}"
+            },
+            "url": "{{base_url}}/api/ai/cmms-intake"
+          }
+        },
+        {
+          "name": "POST /api/ai/intake/email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{llm_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_email\": \"tenant@example.com\",\n  \"to_email\": \"maintenance@example.com\",\n  \"subject\": \"Leak in ARC 205\",\n  \"body\": \"There is water dripping from the ceiling near ARC room 205.\",\n  \"environment_code\": \"{{environment_code}}\"\n}"
+            },
+            "url": "{{base_url}}/api/ai/intake/email"
+          }
+        },
+        {
+          "name": "POST /api/ai/cmms-assistant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{llm_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"What details should I ask for before submitting this HVAC request?\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"operator_console\"\n}"
+            },
+            "url": "{{base_url}}/api/ai/cmms-assistant"
+          }
+        },
+        {
+          "name": "POST /api/ai/extract-work-order-fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{llm_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Please fix the broken light in MAIN lobby.\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"text\"\n}"
+            },
+            "url": "{{base_url}}/api/ai/extract-work-order-fields"
+          }
+        },
+        {
+          "name": "POST /api/ai/summarize-work-order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{llm_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Tenant reports the sink in ARC room 205 has been leaking since this morning.\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"text\"\n}"
+            },
+            "url": "{{base_url}}/api/ai/summarize-work-order"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment and Validation",
+      "item": [
+        {
+          "name": "GET /api/environments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/environments"
+          }
+        },
+        {
+          "name": "GET /api/environments/{{environment_code}}/validation-rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/environments/{{environment_code}}/validation-rules"
+          }
+        },
+        {
+          "name": "POST /api/environments/{{environment_code}}/validate-sample",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"values\": {\n    \"building\": \"ARC\",\n    \"room\": \"205\",\n    \"priority\": \"normal\",\n    \"summary\": \"Noisy AC unit\"\n  }\n}"
+            },
+            "url": "{{base_url}}/api/environments/{{environment_code}}/validate-sample"
+          }
+        },
+        {
+          "name": "GET /api/admin/environments/{{environment_code}}/codes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/environments/{{environment_code}}/codes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Output Contracts",
+      "item": [
+        {
+          "name": "GET /api/output-contracts/{{endpoint}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/output-contracts/{{endpoint}}"
+          }
+        },
+        {
+          "name": "GET /api/admin/output-contracts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/output-contracts"
+          }
+        },
+        {
+          "name": "POST /api/admin/output-contracts/{{contract_id}}/validate-sample",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"values\": {\n    \"validation\": {\n      \"can_create_work_order\": true\n    },\n    \"drafts\": {\n      \"client_reply\": \"Thanks, we will review this request.\"\n    }\n  }\n}"
+            },
+            "url": "{{base_url}}/api/admin/output-contracts/{{contract_id}}/validate-sample"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Operations",
+      "item": [
+        {
+          "name": "GET /api/admin/api-keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/api-keys"
+          }
+        },
+        {
+          "name": "POST /api/admin/api-keys",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo client\",\n  \"owner\": \"operator\",\n  \"allowed_endpoints\": [\"cmms-intake\", \"intake/email\"],\n  \"allowed_environments\": [\"{{environment_code}}\"]\n}"
+            },
+            "url": "{{base_url}}/api/admin/api-keys"
+          }
+        },
+        {
+          "name": "PATCH /api/admin/api-keys/{{key_id}}",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"allowed_endpoints\": [\"cmms-intake\"],\n  \"allowed_environments\": [\"{{environment_code}}\"]\n}"
+            },
+            "url": "{{base_url}}/api/admin/api-keys/{{key_id}}"
+          }
+        },
+        {
+          "name": "GET /api/admin/workflow-runs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/workflow-runs"
+          }
+        },
+        {
+          "name": "GET /api/admin/workflow-runs/{{run_id}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/workflow-runs/{{run_id}}"
+          }
+        },
+        {
+          "name": "GET /api/admin/environments/{{environment_code}}/cmms-connector",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{admin_cookie}}"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/environments/{{environment_code}}/cmms-connector"
+          }
+        }
+      ]
+    }
+  ]
+}

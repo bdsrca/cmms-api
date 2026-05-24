@@ -2,18 +2,21 @@
 
 The public showcase uses simple examples, but the production design should be explicit and boring.
 
+For copyable Postman-style requests, see [`api-sample-calls.md`](api-sample-calls.md).
+
 ## Core endpoints
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/ai/intake/text` | Convert typed request text into a validated draft. |
-| `POST /api/ai/intake/voice-transcript` | Convert an edited transcript into a validated draft. |
-| `POST /api/ai/intake/screenshot` | Convert image-derived content into a validated draft. |
-| `POST /api/contracts/validate` | Validate sample model output against a contract. |
-| `GET /api/environments/{code}/codes` | Read allowed codes for a scoped environment. |
-| `GET /api/usage/summary` | Return safe usage metrics for allowed scopes. |
-| `POST /api/tokens/free` | Issue a restricted free token, admin only. |
-| `POST /api/tokens/revoke` | Revoke a token, admin only. |
+| `POST /api/ai/cmms-intake` | Convert typed request text into a validated advisory draft. |
+| `POST /api/ai/intake/email` | Convert email fields into the same controlled intake workflow. |
+| `POST /api/ai/cmms-assistant` | Return a controlled advisory CMMS assistant response. |
+| `POST /api/ai/extract-work-order-fields` | Extract work-order fields without creating a work order. |
+| `POST /api/ai/summarize-work-order` | Return a short work-order summary. |
+| `GET /api/environments` | List configured environments for the current portal user. |
+| `GET /api/environments/{code}/validation-rules` | Read validation rules for a scoped environment. |
+| `POST /api/environments/{code}/validate-sample` | Validate a sample payload against environment rules. |
+| `GET /api/output-contracts/{endpoint}` | Read the active output contract for an endpoint. |
 
 ## Response pattern
 

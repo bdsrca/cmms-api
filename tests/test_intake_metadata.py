@@ -114,12 +114,19 @@ class IntakeMetadataTests(unittest.TestCase):
         self.assertIn("submission", properties)
         self.assertIn("request", properties)
         self.assertIn("metadata_review", properties)
+        self.assertIn("asset_context", properties)
+        self.assertIn("work_order_plan", properties)
+        self.assertIn("assignment_context", properties)
+        self.assertIn("inventory_context", properties)
+        self.assertIn("procurement_request", properties)
+        self.assertIn("orchestration_summary", properties)
+        self.assertIn("action_plan", properties)
 
-    def test_default_output_contract_seed_uses_metadata_version(self) -> None:
+    def test_default_output_contract_seed_uses_controlled_orchestration_version(self) -> None:
         source = (ROOT / "app" / "output_contracts.py").read_text(encoding="utf-8")
 
-        self.assertIn('target_version = "v3"', source)
-        self.assertIn("submission metadata", source)
+        self.assertIn('target_version = "v7"', source)
+        self.assertIn("controlled inventory, procurement, and orchestration planning", source)
 
 
 if __name__ == "__main__":

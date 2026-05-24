@@ -10,6 +10,13 @@ def model_extraction_output(run: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def workflow_step_output(run: dict[str, Any], step_name: str) -> dict[str, Any]:
+    for step in run.get("steps") or []:
+        if step.get("step_name") == step_name and isinstance(step.get("output_json"), dict):
+            return step["output_json"]
+    return {}
+
+
 def issue_messages(issues: Any) -> list[str]:
     messages: list[str] = []
     for issue in issues if isinstance(issues, list) else []:
@@ -31,33 +38,68 @@ def derive_environment_preview_status(errors: list[str], warnings: list[str]) ->
 
 
 def build_canonical_cmms_payload_preview(payload: dict[str, Any], run_id: Any) -> dict[str, Any]:
+    asset_context = payload.get("asset_context") if isinstance(payload.get("asset_context"), dict) else {}
+    work_order_plan = payload.get("work_order_plan") if isinstance(payload.get("work_order_plan"), dict) else {}
+    inventory_context = payload.get("inventory_context") if isinstance(payload.get("inventory_context"), dict) else {}
+    procurement_request = payload.get("procurement_request") if isinstance(payload.get("procurement_request"), dict) else {}
+    fields = {
+        "summary": payload.get("summary"),
+        "location": {
+            "building": payload.get("building"),
+            "room": payload.get("room"),
+        },
+        "priority": payload.get("priority"),
+        "work_order_type": payload.get("work_order_type"),
+        "assignment": {
+            "assign_to": payload.get("assign_to"),
+            "issue_to": payload.get("issue_to"),
+            "job_type": payload.get("job_type"),
+        },
+        "requester": {
+            "name": payload.get("submitted_by"),
+            "email": payload.get("submitted_email"),
+            "phone": payload.get("submitted_phone"),
+        },
+        "requested_due_date": payload.get("requested_due"),
+        "source": {
+            "method": payload.get("submitted_method"),
+            "submitted_at": payload.get("submitted_at"),
+            "intake_run_id": run_id,
+        },
+    }
+    if asset_context:
+        fields["asset"] = asset_context.get("asset")
+        fields["asset_context_status"] = asset_context.get("status")
+    if work_order_plan:
+        fields["planning"] = {
+            "status": work_order_plan.get("status"),
+            "advisory_only": bool(work_order_plan.get("advisory_only", True)),
+            "asset_code": work_order_plan.get("asset_code"),
+            "trade": work_order_plan.get("trade"),
+            "work_order_type": work_order_plan.get("work_order_type"),
+            "likely_parts": work_order_plan.get("likely_parts") if isinstance(work_order_plan.get("likely_parts"), list) else [],
+            "requires_review": bool(work_order_plan.get("requires_review")),
+            "reasons": work_order_plan.get("reasons") if isinstance(work_order_plan.get("reasons"), list) else [],
+        }
+    if inventory_context:
+        fields["inventory"] = {
+            "status": inventory_context.get("status"),
+            "requires_procurement": bool(inventory_context.get("requires_procurement")),
+            "items": inventory_context.get("items") if isinstance(inventory_context.get("items"), list) else [],
+            "reasons": inventory_context.get("reasons") if isinstance(inventory_context.get("reasons"), list) else [],
+        }
+    if procurement_request:
+        fields["procurement"] = {
+            "status": procurement_request.get("status"),
+            "advisory_only": bool(procurement_request.get("advisory_only", True)),
+            "fake_connector": procurement_request.get("fake_connector"),
+            "asset_code": procurement_request.get("asset_code"),
+            "lines": procurement_request.get("lines") if isinstance(procurement_request.get("lines"), list) else [],
+            "reason": procurement_request.get("reason"),
+        }
     return {
         "schema": "canonical_cmms_work_order_v1",
-        "fields": {
-            "summary": payload.get("summary"),
-            "location": {
-                "building": payload.get("building"),
-                "room": payload.get("room"),
-            },
-            "priority": payload.get("priority"),
-            "work_order_type": payload.get("work_order_type"),
-            "assignment": {
-                "assign_to": payload.get("assign_to"),
-                "issue_to": payload.get("issue_to"),
-                "job_type": payload.get("job_type"),
-            },
-            "requester": {
-                "name": payload.get("submitted_by"),
-                "email": payload.get("submitted_email"),
-                "phone": payload.get("submitted_phone"),
-            },
-            "requested_due_date": payload.get("requested_due"),
-            "source": {
-                "method": payload.get("submitted_method"),
-                "submitted_at": payload.get("submitted_at"),
-                "intake_run_id": run_id,
-            },
-        },
+        "fields": fields,
     }
 
 
@@ -177,6 +219,10 @@ def build_environment_handoff_preview(
 
 def build_cmms_handoff_candidate(run: dict[str, Any], review: dict[str, Any]) -> dict[str, Any] | None:
     extraction = model_extraction_output(run)
+    asset_context = workflow_step_output(run, "asset_resolution")
+    work_order_plan = workflow_step_output(run, "work_order_planning")
+    inventory_context = workflow_step_output(run, "inventory_check")
+    procurement_request = workflow_step_output(run, "procurement_planning")
     fields = extraction.get("fields") if isinstance(extraction.get("fields"), dict) else {}
     if not fields or not extraction.get("request_type"):
         return None
@@ -200,6 +246,14 @@ def build_cmms_handoff_candidate(run: dict[str, Any], review: dict[str, Any]) ->
         "submitted_at": submission.get("submitted_at"),
         "submitted_method": submission.get("submitted_method"),
     }
+    if asset_context:
+        payload["asset_context"] = asset_context
+    if work_order_plan:
+        payload["work_order_plan"] = work_order_plan
+    if inventory_context:
+        payload["inventory_context"] = inventory_context
+    if procurement_request:
+        payload["procurement_request"] = procurement_request
     cmms_payload_preview = build_canonical_cmms_payload_preview(payload, run.get("run_id"))
     environment_handoff_preview = build_environment_handoff_preview(cmms_payload_preview, run.get("environment_code"))
     return {

@@ -16,7 +16,7 @@ def now_text() -> str:
 
 
 def seed_default_output_contracts() -> None:
-    target_version = "v3"
+    target_version = "v7"
     row = db_fetchone(
         "SELECT id FROM ai_output_contracts WHERE endpoint = ? AND version = ?",
         ("cmms-intake", target_version),
@@ -37,7 +37,7 @@ def seed_default_output_contracts() -> None:
         (
             "cmms-intake",
             target_version,
-            "Default CMMS intake output contract with submission metadata",
+            "Default CMMS intake output contract with controlled inventory, procurement, and orchestration planning",
             json.dumps(DEFAULT_CMMS_INTAKE_CONTRACT),
             timestamp,
             timestamp,

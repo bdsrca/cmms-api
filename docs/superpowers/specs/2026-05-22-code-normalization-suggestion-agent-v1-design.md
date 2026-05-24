@@ -35,14 +35,75 @@ The first version focuses on code suggestion for these fields:
 usually more operationally sensitive and already has code/description/alias
 matching.
 
+## Required Pre-Fixes
+
+Before adding the agent step, implementation must fix four existing pipeline
+details that would otherwise hide or distort the values the normalizer needs.
+
+### Preserve Raw Extraction
+
+Current priority validation falls back to `NORMAL` when the extracted value is
+not in the configured priority list. That fallback can stay for
+backward-compatible validated fields, but the raw model output must also be
+preserved.
+
+The intake pipeline should carry:
+
+```json
+{
+  "raw_extracted_fields": {
+    "priority": "urgent phrase"
+  },
+  "validated_fields": {
+    "priority": "NORMAL"
+  },
+  "invalid_code_candidates": {
+    "priority": "urgent phrase"
+  }
+}
+```
+
+The normalizer must use raw extracted values plus redacted original request text,
+not only fallback-adjusted fields.
+
+### Fix Issue-To Category Mapping
+
+The configured code category is:
+
+```text
+issue_to_employee_number
+```
+
+The default validation rule for `issue_to` must map to
+`issue_to_employee_number`, not `issue_to`. This keeps deterministic validation
+and the future normalizer aligned.
+
+### Move Draft Generation Later
+
+Draft generation currently happens inside the model extraction step before
+contract validation and environment validation. Implementation must move draft
+generation after code normalization and environment validation so drafts use the
+final visible normalized values.
+
+### Extend Public Response Model
+
+`IntakeResponse` must include:
+
+```python
+code_normalization: dict[str, Any] | None = None
+```
+
+Otherwise FastAPI response-model filtering can remove the new response block.
+
 ## Chosen Approach
 
 Use one optional LLM workflow step after output contract validation and before
-environment validation finalization:
+environment validation:
 
 ```text
 Request
--> Model Extraction
+-> Classifier Agent
+-> Field Extractor Agent
 -> Output Contract Validation
 -> Code Normalization Suggestion Agent
 -> Environment Validation
@@ -55,6 +116,8 @@ Request
 The suggestion agent receives:
 
 - the contract-valid extracted result;
+- the preserved raw extracted fields;
+- invalid code candidates produced during initial extraction validation;
 - the selected `environment_code`;
 - enabled code-list values for supported categories;
 - the original request text in a redacted/truncated form;
@@ -207,6 +270,14 @@ Add a new prompt endpoint:
 cmms-code-normalizer
 ```
 
+Implementation must add this endpoint to the existing prompt endpoint registry
+and seed a default active prompt:
+
+```text
+SUPPORTED_PROMPT_ENDPOINTS += {"cmms-code-normalizer"}
+DEFAULT_PROMPT_VERSIONS["cmms-code-normalizer"] = ...
+```
+
 The default active prompt must:
 
 - include `/no_think`;
@@ -272,20 +343,25 @@ Prompt Versions should list `cmms-code-normalizer` like other managed prompts.
 
 Required tests:
 
-1. Contract failure skips the code normalizer.
-2. Missing/invalid priority can accept a configured `URGENT` suggestion.
-3. Suggested code not in the environment code list is rejected.
-4. Low confidence suggestion is rejected.
-5. Already-valid field is not overwritten.
-6. Multilingual urgency input can produce a visible suggestion.
-7. `ai_validation.normalized` shows what changed.
-8. Workflow trace includes `code_normalization_suggestion_agent`.
-9. Prompt endpoint `cmms-code-normalizer` is seeded.
-10. Test Console shows the code normalization block.
-11. Existing Safety Reviewer Agent still runs after normalization.
-12. Existing CMMS auto-push gates still require contract, validation, review, and
+1. Raw extracted priority is preserved before fallback to `NORMAL`.
+2. `invalid_code_candidates.priority` captures an unconfigured urgent phrase.
+3. Default `issue_to` validation maps to `issue_to_employee_number`.
+4. Contract failure skips the code normalizer.
+5. Missing/invalid priority can accept a configured `URGENT` suggestion.
+6. Suggested code not in the environment code list is rejected.
+7. Low confidence suggestion is rejected.
+8. Already-valid field is not overwritten.
+9. Multilingual urgency input can produce a visible suggestion.
+10. `ai_validation.normalized` shows what changed.
+11. Workflow trace includes `code_normalization_suggestion_agent`.
+12. Prompt endpoint `cmms-code-normalizer` is seeded.
+13. `IntakeResponse` does not filter out `code_normalization`.
+14. Draft generation runs after code normalization and environment validation.
+15. Test Console shows the code normalization block.
+16. Existing Safety Reviewer Agent still runs after normalization.
+17. Existing CMMS auto-push gates still require contract, validation, review, and
     metadata readiness.
-13. No generic `/chat`, LLM judge, Router Agent, backend audio upload, new
+18. No generic `/chat`, LLM judge, Router Agent, backend audio upload, new
     write-back route, or email sending is added.
 
 ## Security And Safety

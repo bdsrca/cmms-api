@@ -139,6 +139,9 @@ def test_case_run_status(comparison: dict[str, Any]) -> str:
     return "failed"
 
 
+test_case_run_status.__test__ = False
+
+
 def list_test_cases(endpoint: str | None = None, environment_code: str | None = None, enabled: bool | None = None) -> list[dict[str, Any]]:
     filters = []
     params: list[Any] = []

@@ -78,8 +78,10 @@ class CmmsIntakeAutoPushTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "sent")
         self.assertEqual(result["external_reference"], "WO-456")
+        self.assertEqual(result["idempotency_key"], "cmms-run-run-1-create-work-order")
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["json_payload"]["schema"], "canonical_cmms_work_order_v1")
+        self.assertEqual(calls[0]["headers"]["Idempotency-Key"], "cmms-run-run-1-create-work-order")
 
     def test_intake_auto_push_blocks_when_reviewer_recommends_human_review(self) -> None:
         from app.ai_endpoints import build_cmms_intake_push_result

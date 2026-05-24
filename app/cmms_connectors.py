@@ -557,6 +557,7 @@ def auto_push_cmms_payload(
         "connector_enabled": bool(connector and connector.get("enabled")),
         "environment_code": normalize_environment_code(environment_code),
         "blocked_reasons": reasons,
+        "idempotency_key": normalize_optional_text(context.get("idempotency_key"), 180),
     }
     def finish(push_result: dict[str, Any]) -> dict[str, Any]:
         record_cmms_push_event(environment_code, context, push_result)
@@ -577,6 +578,8 @@ def auto_push_cmms_payload(
     sender = sender or default_cmms_sender
     try:
         headers = {**connector_static_headers(connector or {}), **build_auth_headers(connector or {})}
+        if result.get("idempotency_key"):
+            headers.setdefault("Idempotency-Key", str(result["idempotency_key"]))
         outgoing_payload = connector_payload(connector or {}, payload or {})
         response = sender(
             endpoint_url=str(connector.get("endpoint_url")),

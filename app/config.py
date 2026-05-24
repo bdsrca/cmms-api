@@ -28,6 +28,8 @@ CODE_CATEGORIES = {
     "assign_to": "Assign to",
     "issue_to_employee_number": "Issue to employee #",
     "job_type": "Job type",
+    "assets": "Assets",
+    "technician_roster": "Technician roster",
 }
 
 DEFAULT_VALIDATION_RULES = [
@@ -36,7 +38,7 @@ DEFAULT_VALIDATION_RULES = [
     ("priority", "Priority", False, "priorities", True, False, "warning", 30),
     ("work_order_type", "Work Order Type", False, "work_order_types", True, False, "warning", 40),
     ("assign_to", "Assign To", False, "assign_to", True, False, "warning", 50),
-    ("issue_to", "Issue To", False, "issue_to", True, False, "warning", 60),
+    ("issue_to", "Issue To", False, "issue_to_employee_number", True, False, "warning", 60),
     ("job_type", "Job Type", False, "job_type", True, False, "warning", 70),
 ]
 
@@ -56,6 +58,13 @@ DEFAULT_CMMS_INTAKE_CONTRACT = {
         "submission": {"type": "object"},
         "request": {"type": "object"},
         "metadata_review": {"type": "object"},
+        "asset_context": {"type": "object"},
+        "work_order_plan": {"type": "object"},
+        "assignment_context": {"type": "object"},
+        "inventory_context": {"type": "object"},
+        "procurement_request": {"type": "object"},
+        "orchestration_summary": {"type": "object"},
+        "action_plan": {"type": "object"},
     },
     "additionalProperties": False,
 }
@@ -63,6 +72,7 @@ DEFAULT_CMMS_INTAKE_CONTRACT = {
 SUPPORTED_PROMPT_ENDPOINTS = {
     "cmms-intake",
     "cmms-intake-reviewer",
+    "cmms-code-normalizer",
     "summarize-work-order",
     "extract-work-order-fields",
     "cmms-assistant",
@@ -167,6 +177,24 @@ DEFAULT_PROMPT_VERSIONS = {
             "Do not change extracted fields, normalized codes, validation results, drafts, or response shape. "
             "Do not claim that a work order was created. Do not approve, dispatch, write to CMMS, or send email. "
             "Keep risk_flags and notes concise."
+        ),
+        "user_template": "{{context_json}}",
+    },
+    "cmms-code-normalizer": {
+        "version": "v1",
+        "name": "Default code normalization suggestion prompt",
+        "temperature": 0.1,
+        "system_prompt": (
+            "/no_think\n"
+            "You are a Code Normalization Suggestion Agent for a controlled CMMS intake workflow. "
+            "Return JSON only with this shape: {\"suggestions\":[]}. "
+            "Each suggestion must have field, input_value, suggested_code, confidence, and reason. "
+            "Allowed fields are priority, work_order_type, job_type, assign_to, and issue_to. "
+            "Use only configured CMMS codes from the provided code_values. Never invent codes. "
+            "Do not rewrite summaries, create work orders, approve requests, write to CMMS, send email, "
+            "change validation rules, or claim any action was performed. "
+            "The request may be in English, Chinese, French, Spanish, Japanese, Korean, or mixed language. "
+            "Keep reasons concise."
         ),
         "user_template": "{{context_json}}",
     },

@@ -6,6 +6,17 @@ from typing import Any, Awaitable, Callable
 import httpx
 from fastapi import HTTPException
 
+from .asset_registry import build_work_order_plan, resolve_asset_context
+from .cmms_action_plan import build_initial_action_plan, create_work_order_idempotency_key, finalize_action_plan
+from .code_normalizer import (
+    apply_code_normalization_suggestions,
+    build_code_normalizer_context,
+    enabled_codes_by_field,
+    failed_code_normalization_block,
+    load_code_values_for_normalizer,
+    normalize_code_normalizer_output,
+    skipped_code_normalization_block,
+)
 from .cmms_connectors import auto_push_cmms_payload
 from .config import ADVISORY_WARNING, ALLOWED_REQUEST_TYPES, MODEL_NAME, OLLAMA_CHAT_URL
 from .db import db_execute
@@ -13,9 +24,12 @@ from .environments import get_environment_values
 from .intake_handoff import build_canonical_cmms_payload_preview, build_environment_handoff_preview
 from .intake_metadata import build_intake_metadata, extract_metadata_from_text, unreviewed_metadata_review
 from .intake_metadata_reviews import save_extracted_metadata_review
+from .inventory_procurement import build_procurement_request, resolve_inventory_context
+from .orchestration_summary import build_orchestration_summary
 from .output_contracts import skipped_ai_validation, validate_output_contract
 from .prompts import intake_prompt_messages, prompt_messages
 from .safety_reviewer import run_safety_reviewer_agent, skipped_reviewer_block
+from .technician_roster import apply_assignment_to_payload, resolve_assignment_context
 from .validation_rules import validate_ai_output
 from .workflow_trace import (
     fail_workflow_step,
@@ -51,6 +65,7 @@ def build_cmms_intake_push_result(
         "review_passed": review.get("status") == "pass",
         "metadata_reviewed": bool((metadata_review or {}).get("reviewed")),
         "handoff_status": (environment_preview or {}).get("status"),
+        "idempotency_key": create_work_order_idempotency_key(run_id),
     }
     result = auto_push_cmms_payload(env_code, canonical_preview, push_context, sender=sender)
     result["handoff_status"] = push_context["handoff_status"]
@@ -59,6 +74,13 @@ def build_cmms_intake_push_result(
 
 def normalize_allowed_values(values: list[str]) -> list[str]:
     return [value.strip() for value in values if value and value.strip()]
+
+
+def clean_optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
 
 
 def clamp_confidence(value: Any) -> float:
@@ -158,26 +180,32 @@ def validate_extracted_fields(
 ) -> dict[str, Any]:
     allowed_buildings = set(normalize_allowed_values(valid_buildings))
     allowed_priorities = set(normalize_allowed_values(valid_priorities))
+    raw_extracted_fields = {
+        "request_type": data.get("request_type"),
+        "building": clean_optional_text(data.get("building")),
+        "room": clean_optional_text(data.get("room")),
+        "priority": clean_optional_text(data.get("priority")),
+        "summary": clean_optional_text(data.get("summary")) or "",
+    }
+    invalid_code_candidates: dict[str, Any] = {}
 
     request_type = data.get("request_type")
     if request_type not in ALLOWED_REQUEST_TYPES:
         request_type = "Unknown"
 
-    building = data.get("building")
-    building = building.strip() if isinstance(building, str) else None
+    building = raw_extracted_fields["building"]
     building = building or None
 
-    room = data.get("room")
-    room = room.strip() if isinstance(room, str) else None
+    room = raw_extracted_fields["room"]
     room = room or None
 
-    priority = data.get("priority")
-    priority = priority.strip() if isinstance(priority, str) else None
+    priority = raw_extracted_fields["priority"]
     if priority not in allowed_priorities:
+        if priority:
+            invalid_code_candidates["priority"] = priority
         priority = "NORMAL"
 
-    summary = data.get("summary")
-    summary = summary.strip() if isinstance(summary, str) and summary.strip() else ""
+    summary = raw_extracted_fields["summary"]
 
     missing_fields = normalize_missing_fields(data.get("missing_fields"))
     if not building or building not in allowed_buildings:
@@ -190,6 +218,14 @@ def validate_extracted_fields(
     if not building or not room:
         needs_human_review = True
 
+    validated_fields = {
+        "request_type": request_type,
+        "building": building,
+        "room": room,
+        "priority": priority or "NORMAL",
+        "summary": summary,
+    }
+
     return {
         "request_type": request_type,
         "building": building,
@@ -199,6 +235,9 @@ def validate_extracted_fields(
         "missing_fields": normalize_missing_fields(missing_fields),
         "needs_human_review": needs_human_review,
         "confidence": clamp_confidence(data.get("confidence")),
+        "raw_extracted_fields": raw_extracted_fields,
+        "validated_fields": validated_fields,
+        "invalid_code_candidates": invalid_code_candidates,
     }
 
 
@@ -208,7 +247,7 @@ def validate_intake(
     field_data: dict[str, Any],
     valid_buildings: list[str],
     valid_priorities: list[str],
-) -> tuple[str, float, dict[str, Any], dict[str, Any]]:
+) -> tuple[str, float, dict[str, Any], dict[str, Any], dict[str, Any]]:
     validated = validate_extracted_fields(
         {
             "request_type": request_type,
@@ -244,7 +283,12 @@ def validate_intake(
         "errors": errors,
         "warnings": [ADVISORY_WARNING],
     }
-    return validated["request_type"], validated["confidence"], fields, validation
+    extraction_context = {
+        "raw_extracted_fields": validated.get("raw_extracted_fields", {}),
+        "validated_fields": validated.get("validated_fields", {}),
+        "invalid_code_candidates": validated.get("invalid_code_candidates", {}),
+    }
+    return validated["request_type"], validated["confidence"], fields, validation, extraction_context
 
 
 def redacted_summary(text: str, max_len: int = 180) -> str:
@@ -406,7 +450,7 @@ async def cmms_intake(
         )
         classifier_data = parse_json_response(await call_ollama_func(intake_messages["classifier"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
         extractor_data = parse_json_response(await call_ollama_func(intake_messages["field_extractor"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
-        request_type, confidence, fields, validation = validate_intake(
+        request_type, confidence, fields, validation, extraction_context = validate_intake(
             classifier_data.get("request_type"),
             classifier_data.get("confidence"),
             extractor_data,
@@ -423,19 +467,7 @@ async def cmms_intake(
             warning = "Submitted location conflicts with extracted location."
             if warning not in validation["warnings"]:
                 validation["warnings"].append(warning)
-        draft_context = {
-            "text": payload.text,
-            "request_type": request_type,
-            "fields": fields,
-            "validation": validation,
-            "submission": metadata["submission"],
-            "request": metadata["request"],
-        }
-        draft_messages = [
-            intake_messages["draft_generator"][0],
-            {"role": "user", "content": json.dumps(draft_context)},
-        ]
-        draft_data = parse_json_response(await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
+
         finish_workflow_step(
             current_step,
             "passed",
@@ -443,15 +475,136 @@ async def cmms_intake(
             output_json={
                 "request_type": request_type,
                 "confidence": confidence,
-                "model_call_count": 3,
+                "model_call_count": 2,
                 "prompt_id": prompt_meta["prompt_id"],
                 "prompt_version": prompt_meta["prompt_version"],
                 "temperature": prompt_meta["temperature"],
                 "fields": fields,
                 "missing_fields": validation["missing_fields"],
+                "invalid_code_candidates": extraction_context["invalid_code_candidates"],
             },
         )
         current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "asset_resolution",
+            25,
+            input_summary=f"environment={env_code or 'none'} text_length={len(payload.text)}",
+        )
+        asset_context = resolve_asset_context(payload.text, env_code)
+        asset_status = asset_context.get("status")
+        asset_step_status = "passed" if asset_status == "resolved" else ("skipped" if asset_status == "skipped" else "warning")
+        finish_workflow_step(
+            current_step,
+            asset_step_status,
+            output_summary=f"asset_status={asset_status} candidates={len(asset_context.get('candidates') or [])}",
+            output_json=asset_context,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "work_order_planning",
+            27,
+            input_summary=f"asset_status={asset_status}",
+        )
+        work_order_plan = build_work_order_plan(asset_context)
+        planning_status = "passed" if work_order_plan.get("status") == "planned" else "warning"
+        finish_workflow_step(
+            current_step,
+            planning_status,
+            output_summary=(
+                f"plan_status={work_order_plan.get('status')} "
+                f"likely_parts={len(work_order_plan.get('likely_parts') or [])}"
+            ),
+            output_json=work_order_plan,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "inventory_check",
+            27,
+            input_summary=f"environment={env_code or 'none'} likely_parts={len(work_order_plan.get('likely_parts') or [])}",
+        )
+        inventory_context = resolve_inventory_context(work_order_plan, env_code)
+        inventory_status = inventory_context.get("status")
+        inventory_step_status = "passed" if inventory_status in {"available", "shortage", "not_required"} else ("skipped" if inventory_status == "skipped" else "warning")
+        finish_workflow_step(
+            current_step,
+            inventory_step_status,
+            output_summary=(
+                f"inventory_status={inventory_status} "
+                f"requires_procurement={bool(inventory_context.get('requires_procurement'))}"
+            ),
+            output_json=inventory_context,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "procurement_planning",
+            27,
+            input_summary=f"inventory_status={inventory_status}",
+        )
+        procurement_request = build_procurement_request(run_id, env_code, work_order_plan, inventory_context)
+        procurement_status = procurement_request.get("status")
+        procurement_step_status = "passed" if procurement_status in {"drafted", "not_required"} else "warning"
+        finish_workflow_step(
+            current_step,
+            procurement_step_status,
+            output_summary=(
+                f"procurement_status={procurement_status} "
+                f"lines={len(procurement_request.get('lines') or [])}"
+            ),
+            output_json=procurement_request,
+        )
+        current_step = None
+
+        assignment_trade = work_order_plan.get("trade") or request_type
+        current_step = start_workflow_step(
+            run_id,
+            "assignment_resolution",
+            28,
+            input_summary=f"environment={env_code or 'none'} trade={assignment_trade or 'none'}",
+        )
+        assignment_context = resolve_assignment_context(payload.text, env_code, trade=assignment_trade)
+        assignment_status = assignment_context.get("status")
+        assignment_step_status = "passed" if assignment_status == "resolved" else ("skipped" if assignment_status == "skipped" else "warning")
+        finish_workflow_step(
+            current_step,
+            assignment_step_status,
+            output_summary=f"assignment_status={assignment_status} candidates={len(assignment_context.get('candidates') or [])}",
+            output_json=assignment_context,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "action_plan_composed",
+            29,
+            input_summary=f"assignment_status={assignment_status} procurement_status={procurement_status}",
+        )
+        action_plan = build_initial_action_plan(run_id, env_code, assignment_context, procurement_request)
+        finish_workflow_step(
+            current_step,
+            "passed",
+            output_summary=f"actions={len(action_plan.get('actions') or [])}",
+            output_json=action_plan,
+        )
+        current_step = None
+        orchestration_summary = build_orchestration_summary(
+            run_id=run_id,
+            environment_code=env_code,
+            priority=fields["priority"],
+            work_order_type=request_type,
+            asset_context=asset_context,
+            assignment_context=assignment_context,
+            inventory_context=inventory_context,
+            procurement_request=procurement_request,
+            action_plan=action_plan,
+        )
 
         location = metadata["request"]["location"]
         metadata_review = unreviewed_metadata_review()
@@ -469,7 +622,15 @@ async def cmms_intake(
             "submission": metadata["submission"],
             "request": metadata["request"],
             "metadata_review": metadata_review,
+            "asset_context": asset_context,
+            "work_order_plan": work_order_plan,
+            "assignment_context": assignment_context,
+            "inventory_context": inventory_context,
+            "procurement_request": procurement_request,
+            "orchestration_summary": orchestration_summary,
+            "action_plan": action_plan,
         }
+        result_payload = apply_assignment_to_payload(result_payload, assignment_context)
 
         current_step = start_workflow_step(run_id, "output_contract_validation", 30, input_summary="endpoint=cmms-intake")
         contract_validation = validate_output_contract("cmms-intake", result_payload)
@@ -492,6 +653,97 @@ async def cmms_intake(
             "errors": contract_validation["errors"],
             "warnings": contract_validation["warnings"],
         }
+
+        current_step = start_workflow_step(
+            run_id,
+            "code_normalization_suggestion_agent",
+            35,
+            input_summary=f"contract_valid={contract_validation['valid']} environment={env_code or 'none'}",
+        )
+        if env_code and contract_validation["valid"]:
+            try:
+                code_values = load_code_values_for_normalizer(env_code)
+                normalizer_context = build_code_normalizer_context(
+                    text=payload.text,
+                    environment_code=env_code,
+                    result=contract_validation["normalized_payload"],
+                    raw_extracted_fields=extraction_context["raw_extracted_fields"],
+                    invalid_code_candidates=extraction_context["invalid_code_candidates"],
+                    code_values=code_values,
+                )
+                normalizer_messages, normalizer_prompt_meta = prompt_messages(
+                    "cmms-code-normalizer",
+                    {"context_json": normalizer_context},
+                )
+                db_execute(
+                    "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
+                    (
+                        normalizer_prompt_meta["model"],
+                        f"{normalizer_prompt_meta['prompt_id']}:{normalizer_prompt_meta['prompt_version']}",
+                        current_step,
+                    ),
+                )
+                normalizer_raw = await call_ollama_func(
+                    normalizer_messages,
+                    temperature=normalizer_prompt_meta["temperature"],
+                    model=normalizer_prompt_meta["model"],
+                )
+                normalizer_data = parse_json_response(normalizer_raw)
+                normalized_suggestions = normalize_code_normalizer_output(
+                    normalizer_data,
+                    enabled_codes_by_field=enabled_codes_by_field(code_values),
+                )
+                code_normalization = apply_code_normalization_suggestions(
+                    result=contract_validation["normalized_payload"],
+                    invalid_code_candidates=extraction_context["invalid_code_candidates"],
+                    normalized_model_output=normalized_suggestions,
+                )
+                if code_normalization["applied"]:
+                    contract_validation["normalized_payload"] = contract_validation["normalized_payload"] | code_normalization["applied"]
+                    fields = fields | {key: value for key, value in code_normalization["applied"].items() if key in fields}
+                normalizer_step_status = "warning" if code_normalization["rejected"] and not code_normalization["applied"] else "passed"
+                finish_workflow_step(
+                    current_step,
+                    normalizer_step_status,
+                    output_summary=(
+                        f"status={code_normalization['status']} "
+                        f"suggestions={len(code_normalization['suggestions'])} "
+                        f"rejected={len(code_normalization['rejected'])}"
+                    ),
+                    output_json={
+                        "status": code_normalization["status"],
+                        "suggestion_count": len(code_normalization["suggestions"]),
+                        "accepted_count": len(code_normalization["applied"]),
+                        "rejected_count": len(code_normalization["rejected"]),
+                        "rejected_reasons": sorted(
+                            {
+                                item.get("reason_code", "unknown")
+                                for item in code_normalization["rejected"]
+                                if isinstance(item, dict)
+                            }
+                        ),
+                        "prompt_id": normalizer_prompt_meta["prompt_id"],
+                        "prompt_version": normalizer_prompt_meta["prompt_version"],
+                    },
+                )
+            except Exception as exc:
+                code_normalization = failed_code_normalization_block("Code normalization failed.")
+                finish_workflow_step(
+                    current_step,
+                    "failed",
+                    output_summary="Code normalization failed.",
+                    output_json={"status": "failed", "message": str(exc)[:200]},
+                )
+        else:
+            message = "Skipped because output contract validation failed." if env_code else "Skipped because no environment_code was supplied."
+            code_normalization = skipped_code_normalization_block(message)
+            finish_workflow_step(
+                current_step,
+                "skipped",
+                output_summary=message,
+                output_json={"status": code_normalization["status"], "enabled": code_normalization["enabled"]},
+            )
+        current_step = None
 
         current_step = start_workflow_step(run_id, "environment_validation", 40, input_summary=f"environment={env_code or 'none'}")
         if env_code and contract_validation["valid"]:
@@ -532,11 +784,51 @@ async def cmms_intake(
             )
             current_step = None
 
+        current_step = start_workflow_step(
+            run_id,
+            "draft_generation",
+            43,
+            model=prompt_meta["model"],
+            prompt_version=f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}",
+            input_summary=f"validation_valid={ai_validation.get('valid')}",
+        )
+        draft_context = {
+            "text": payload.text,
+            "request_type": request_type,
+            "fields": fields,
+            "validation": validation,
+            "contract": contract_block,
+            "ai_validation": ai_validation,
+            "code_normalization": code_normalization,
+            "asset_context": asset_context,
+            "work_order_plan": work_order_plan,
+            "assignment_context": assignment_context,
+            "inventory_context": inventory_context,
+            "procurement_request": procurement_request,
+            "orchestration_summary": orchestration_summary,
+            "action_plan": action_plan,
+            "submission": metadata["submission"],
+            "request": metadata["request"],
+        }
+        draft_messages = [
+            intake_messages["draft_generator"][0],
+            {"role": "user", "content": json.dumps(draft_context)},
+        ]
+        draft_data = parse_json_response(
+            await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+        )
         drafts = {
             "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
             "internal_note": str(draft_data.get("internal_note") or "Validated intake. Ready for human review or controlled CMMS workflow."),
             "client_reply": str(draft_data.get("client_reply") or "Thanks, we captured your request."),
         }
+        finish_workflow_step(
+            current_step,
+            "passed",
+            output_summary="Draft text generated after validation.",
+            output_json={"draft_fields": sorted(drafts.keys())},
+        )
+        current_step = None
 
         current_step = start_workflow_step(
             run_id,
@@ -596,12 +888,41 @@ async def cmms_intake(
             review=review,
             metadata_review=metadata_review,
         )
+        action_plan = finalize_action_plan(action_plan, cmms_push)
+        orchestration_summary = build_orchestration_summary(
+            run_id=run_id,
+            environment_code=env_code,
+            priority=fields["priority"],
+            work_order_type=request_type,
+            asset_context=asset_context,
+            assignment_context=assignment_context,
+            inventory_context=inventory_context,
+            procurement_request=procurement_request,
+            action_plan=action_plan,
+            cmms_push=cmms_push,
+        )
+        response_result = contract_validation["normalized_payload"] if contract_validation["valid"] else result_payload
+        response_result = response_result | {"action_plan": action_plan, "orchestration_summary": orchestration_summary}
         push_step_status = "passed" if cmms_push["status"] in {"sent", "skipped"} else ("warning" if cmms_push["status"] == "blocked" else "failed")
         finish_workflow_step(
             current_step,
             push_step_status,
             output_summary=f"cmms_push={cmms_push['status']}",
             output_json=cmms_push,
+        )
+        current_step = None
+
+        current_step = start_workflow_step(
+            run_id,
+            "orchestration_summary",
+            49,
+            input_summary=f"status={orchestration_summary['status']} actions={len(orchestration_summary['requested_actions'])}",
+        )
+        finish_workflow_step(
+            current_step,
+            "warning" if orchestration_summary["status"] in {"needs_review", "blocked"} else "passed",
+            output_summary=orchestration_summary["operator_message"],
+            output_json=orchestration_summary,
         )
         current_step = None
 
@@ -616,8 +937,16 @@ async def cmms_intake(
             "environment_code": env_code,
             "trace": {"available": True, "run_id": run_id},
             "contract": contract_block,
-            "result": contract_validation["normalized_payload"] if contract_validation["valid"] else result_payload,
+            "result": response_result,
             "ai_validation": ai_validation,
+            "code_normalization": code_normalization,
+            "asset_context": asset_context,
+            "work_order_plan": work_order_plan,
+            "assignment_context": assignment_context,
+            "inventory_context": inventory_context,
+            "procurement_request": procurement_request,
+            "orchestration_summary": orchestration_summary,
+            "action_plan": action_plan,
             "review": review,
             "cmms_push": cmms_push,
             "submission": metadata["submission"],

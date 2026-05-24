@@ -14,6 +14,7 @@ from .environments import (
     patch_environment as patch_environment_helper,
     preview_codes as preview_codes_helper,
 )
+from .demo_environment import seed_demo_environment
 from .security import PortalUser, current_admin, current_user
 
 
@@ -59,6 +60,11 @@ async def create_environment(payload: EnvironmentRequest, user: PortalUser = Dep
 @router.patch("/api/admin/environments/{environment_code}")
 async def patch_environment(environment_code: str, payload: EnvironmentPatchRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
     return patch_environment_helper(environment_code, payload)
+
+
+@router.post("/api/admin/environments/{environment_code}/demo-setup")
+async def load_demo_setup(environment_code: str, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
+    return seed_demo_environment(environment_code)
 
 
 @router.get("/api/admin/environments/{environment_code}/codes")

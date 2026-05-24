@@ -196,6 +196,7 @@ These images are synthetic public-safe mockups. They show the intended workflow 
 |   |-- multi-agent-roadmap.md
 |   |-- targeted-analytics.md
 |   |-- api-design.md
+|   |-- api-sample-calls.md
 |   |-- deployment-runbook.md
 |   |-- portfolio-notes.md
 |   `-- source-code-map.md
@@ -226,6 +227,8 @@ These images are synthetic public-safe mockups. They show the intended workflow 
 ## Run the showcase examples
 
 The examples use only the Python standard library.
+
+For Postman-style API request examples, see `docs/api-sample-calls.md`. A Postman import file is available at `docs/postman/local-cmms-llm-api.postman_collection.json`.
 
 ```bash
 python -m unittest discover -s tests

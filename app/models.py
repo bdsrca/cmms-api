@@ -78,6 +78,14 @@ class IntakeResponse(BaseModel):
     contract: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     ai_validation: dict[str, Any] | None = None
+    code_normalization: dict[str, Any] | None = None
+    asset_context: dict[str, Any] | None = None
+    work_order_plan: dict[str, Any] | None = None
+    assignment_context: dict[str, Any] | None = None
+    inventory_context: dict[str, Any] | None = None
+    procurement_request: dict[str, Any] | None = None
+    orchestration_summary: dict[str, Any] | None = None
+    action_plan: dict[str, Any] | None = None
     review: dict[str, Any] | None = None
     submission: dict[str, Any] | None = None
     request: dict[str, Any] | None = None
