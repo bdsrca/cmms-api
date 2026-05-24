@@ -788,7 +788,10 @@ PORTAL_HTML = r"""<!doctype html>
       $("appView").classList.remove("nav-open");
       renderNav();
     }
-    function envOptions() { return state.envs.map(e => `<option value="${e.environment_code}">${e.environment_code} - ${e.name}</option>`).join(""); }
+    function envOptions() {
+      const selectedEnv = state.envs.some(e => e.environment_code === "DEFAULT") ? "DEFAULT" : state.envs[0]?.environment_code;
+      return state.envs.map(e => `<option value="${e.environment_code}" ${e.environment_code === selectedEnv ? "selected" : ""}>${e.environment_code} - ${e.name}</option>`).join("");
+    }
     function show(id) {
       state.page = id; renderNav();
       const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system };
