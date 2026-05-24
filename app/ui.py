@@ -219,6 +219,50 @@ PORTAL_HTML = r"""<!doctype html>
       padding: 32px;
     }
     .login-card h1 { font-size: 26px; letter-spacing: -.01em; }
+    .login-docs-link {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #eef0f3;
+    }
+    .docs-public {
+      display: none;
+      min-height: 100vh;
+      background: #f7f7f8;
+      padding: 34px clamp(18px, 4vw, 48px);
+    }
+    .docs-shell {
+      width: min(1080px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+    .docs-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 6px 0 10px;
+    }
+    .docs-top h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: -.02em;
+    }
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .docs-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: var(--shadow-sm);
+      padding: 18px;
+    }
+    .docs-card h2 { margin: 0 0 8px; font-size: 16px; letter-spacing: -.01em; }
+    .docs-card p { margin: 0; line-height: 1.5; }
+    .docs-card ul { margin: 14px 0 0; padding-left: 18px; color: #475569; line-height: 1.5; }
     .app { grid-template-columns: 190px 1fr; grid-template-rows: 52px 1fr; }
     .top {
       background: rgba(255, 255, 255, .88);
@@ -328,8 +372,250 @@ PORTAL_HTML = r"""<!doctype html>
     .modal { border-radius: 18px; box-shadow: var(--shadow-md); }
     .modal-actions { background: #fafafa; }
     .preview-summary div { border-radius: 12px; background: #fff; border-color: #e5e7eb; }
+    .content { padding: 30px clamp(22px, 3vw, 38px); }
+    .page-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+    .page-title-main { display: grid; gap: 5px; }
+    .page-subtitle { color: #64748b; font-size: 14px; max-width: 720px; line-height: 1.45; }
+    .nav-group { display: grid; gap: 2px; margin-bottom: 16px; }
+    .nav-group-title {
+      padding: 10px 11px 5px;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .section-stack { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
+    .dashboard-hero {
+      display: grid;
+      width: 100%;
+      grid-column: 1 / -1;
+      grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .dashboard-status-list { display: grid; gap: 10px; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid #eef2f7;
+    }
+    .status-row:last-child { border-bottom: 0; }
+    .select-wrap {
+      position: relative;
+      display: block;
+    }
+    .select-wrap::after {
+      content: "";
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid #64748b;
+      border-bottom: 2px solid #64748b;
+      transform: translateY(-65%) rotate(45deg);
+      pointer-events: none;
+    }
+    .credentials-panel {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fbfcfe;
+      padding: 10px 12px;
+    }
+    .credentials-panel summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #334155;
+      list-style: none;
+    }
+    .credentials-panel summary::-webkit-details-marker { display: none; }
+    .credentials-panel .compact-field-row { margin-top: 10px; }
+    .mobile-menu-toggle { display: none; }
+    .admin-badge {
+      margin-left: auto;
+      border: 1px solid #fee2e2;
+      border-radius: 999px;
+      background: #fff7f7;
+      color: #b91c1c;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .nav button.admin-only::after { content: none; }
+    .coming-soon-tabs {
+      margin-top: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fbfcfe;
+      padding: 10px 12px;
+    }
+    .coming-soon-tabs summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #475569;
+      list-style: none;
+    }
+    .coming-soon-tabs summary::-webkit-details-marker { display: none; }
+    .coming-soon-tabs .tabs { margin-top: 10px; }
+    .quiet-toolbar {
+      border-style: dashed;
+      background: #fbfcfe;
+      box-shadow: none;
+    }
+    .input-with-voice {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+    }
+    .voice-icon-button {
+      width: 42px;
+      min-width: 42px;
+      height: 42px;
+      padding: 0;
+      border-radius: 999px;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .voice-icon-button.listening {
+      background: #dc2626;
+      box-shadow: 0 0 0 4px rgba(220, 38, 38, .14);
+    }
+    .voice-settings {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fbfcfe;
+      padding: 10px 12px;
+    }
+    .voice-settings summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #334155;
+      list-style: none;
+    }
+    .voice-settings summary::-webkit-details-marker { display: none; }
+    .voice-settings-body { margin-top: 10px; }
+    .table-scroll {
+      width: 100%;
+      overflow-x: auto;
+    }
+    .table-scroll table { min-width: 720px; }
+    select, .cmms-select {
+      appearance: none;
+      min-height: 42px;
+      border-radius: 12px;
+      padding: 9px 38px 9px 13px;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      background-image: none;
+    }
+    select:focus, .cmms-select:focus {
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 4px rgba(14, 165, 233, .14);
+    }
+    details.advanced-panel {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fbfcfe;
+      padding: 12px 14px;
+    }
+    details.advanced-panel summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #334155;
+    }
+    .grid { gap: 14px; }
+    .card-body { padding: 16px; }
+    .run-surface { gap: 8px; padding: 10px; }
+    .compact-field-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+    }
+    .compact-field-row-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .compact-field-row label { margin-top: 6px; }
+    .compact-field-row button { white-space: nowrap; min-height: 36px; padding: 7px 11px; }
+    .compact-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 6px; }
+    .compact-actions button { min-height: 34px; padding: 6px 10px; }
+    .test-console-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .compact-textarea { min-height: 96px; }
+    .test-console-textarea { min-height: 180px; }
+    .orchestration-textarea { min-height: 180px; }
+    .email-compose textarea.compact-textarea { min-height: 180px; }
+    .console-output { max-height: min(42vh, 420px); overflow: auto; }
+    .collapsible-panel {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .collapsible-panel summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 11px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .collapsible-panel summary::-webkit-details-marker { display: none; }
+    .collapsible-panel summary::before {
+      content: ">";
+      color: #6b7280;
+      font-size: 12px;
+      margin-right: 2px;
+      transition: transform .14s ease;
+    }
+    .collapsible-panel[open] summary::before { transform: rotate(90deg); }
+    .collapsible-panel summary > span { flex: 1; }
+    .collapsible-content { border-top: 1px solid #eef0f3; padding: 10px 11px; }
+    .collapsible-content .ai-panel, .collapsible-content .readiness { box-shadow: none; }
+    .collapsible-dark {
+      background: #0f172a;
+      color: #f8fafc;
+      border-color: #111827;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .16);
+    }
+    .collapsible-dark summary::before { color: #cbd5e1; }
+    .collapsible-dark .collapsible-content { border-top-color: rgba(148, 163, 184, .2); }
+    .collapsible-dark pre { background: transparent; color: #f8fafc; padding: 0; min-height: 180px; }
+    .collapsible-toolbar { justify-content: flex-end; margin-bottom: 8px; }
     @media (max-width: 1200px) { .contracts-layout { grid-template-columns: 1fr; } }
-    @media (max-width: 900px) { .app { grid-template-columns: 1fr; } .nav { display: flex; overflow-x: auto; } .nav button { min-width: 180px; } .span-3,.span-4,.span-5,.span-6,.span-7,.span-8 { grid-column: span 12; } .result-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+      .top { min-height: 56px; gap: 10px; flex-wrap: wrap; align-content: center; }
+      .brand { max-width: 160px; line-height: 1.2; }
+      .userbar { margin-left: auto; gap: 8px; }
+      .userbar span { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .mobile-menu-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 6px 11px; }
+      .nav { display: none; grid-column: 1 / -1; max-height: calc(100vh - 56px); overflow: auto; border-right: 0; border-bottom: 1px solid #e5e7eb; }
+      .app.nav-open .nav { display: block; }
+      .nav-group { display: grid; margin-bottom: 12px; }
+      .nav-group-title { display: block; }
+      .nav button { min-width: 0; }
+      .content { padding: 24px 22px; }
+      .docs-public { padding: 24px 18px; }
+      .docs-top { display: grid; }
+      .dashboard-hero { grid-template-columns: 1fr; }
+      .page-title { display: grid; }
+      .tabs { overflow-x: auto; white-space: nowrap; }
+      .span-3,.span-4,.span-5,.span-6,.span-7,.span-8 { grid-column: span 12; }
+      .result-grid, .compact-field-row, .compact-field-row-two { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -340,16 +626,31 @@ PORTAL_HTML = r"""<!doctype html>
       <label>Username</label><input id="loginUser" value="admin">
       <label>Password</label><input id="loginPass" type="password" placeholder="Enter admin password">
       <div class="row" style="margin-top:18px"><button onclick="login()">Sign in</button><span id="loginMsg" class="muted"></span></div>
+      <div class="login-docs-link"><button class="secondary" onclick="showPublicDocs()">Browse documentation</button></div>
+    </div>
+  </div>
+  <div id="docsView" class="docs-public">
+    <div class="docs-shell">
+      <div class="docs-top">
+        <div>
+          <h1>Documentation</h1>
+          <p class="muted">Read-only product notes for visitors. Browsing docs does not grant a portal session or API access.</p>
+        </div>
+        <button class="secondary" onclick="showLogin()">Sign in</button>
+      </div>
+      <div id="publicDocs" class="docs-grid">
+        <div class="docs-card"><p class="muted">Loading documentation...</p></div>
+      </div>
     </div>
   </div>
   <div id="appView" class="app">
     <header class="top">
       <div class="brand">CMMS LLM Management Portal</div>
-      <div class="userbar"><span id="healthText">Checking...</span><span id="userText"></span><button class="secondary" onclick="logout()">Logout</button></div>
+      <div class="userbar"><button class="secondary mobile-menu-toggle" onclick="toggleNav()">Menu</button><span id="healthText">Checking...</span><span id="userText"></span><button class="secondary" onclick="logout()">Logout</button></div>
     </header>
     <nav class="nav" id="nav"></nav>
     <main class="content">
-      <div class="page-title"><h1 id="pageTitle">Dashboard</h1><div id="pageActions"></div></div>
+      <div class="page-title"><div class="page-title-main"><h1 id="pageTitle">Dashboard</h1><div id="pageSubtitle" class="page-subtitle"></div></div><div id="pageActions"></div></div>
       <div id="page"></div>
     </main>
   </div>
@@ -363,16 +664,50 @@ PORTAL_HTML = r"""<!doctype html>
       reviewerPromptComparison: null, systemControlKey: ""
     };
     const menu = [
+      ["orchestration","Orchestration",false,"O"],
       ["dashboard","Dashboard",false,"▦"],["test","Test Console",false,"▶"],["email","Email Intake",false,"✉"],["builder","API Builder",false,"⌘"],["testCases","Test Cases",true,"✓"],["testSuites","Test Suites",true,"✓"],
       ["environments","Environments",true,"◇"],["contracts","Output Contracts",true,"▣"],["prompts","Prompt Versions",true,"✎"],["keys","API Keys",true,"◆"],
       ["users","Users",true,"◉"],["logs","Logs",false,"☰"],["reports","Reports",false,"↗"],["kb","Knowledge Base",false,"◌"],
       ["remote","Remote Access",true,"⇄"],["system","System",true,"⚙"]
     ];
+    const menuGroups = [
+      ["Operate", ["dashboard", "orchestration", "test", "email", "builder"]],
+      ["Configure", ["environments", "contracts", "prompts", "keys"]],
+      ["Quality", ["testCases", "testSuites", "logs", "reports", "kb"]],
+      ["Admin", ["users", "remote", "system"]]
+    ];
+    const menuById = Object.fromEntries(menu.map(item => [item[0], item]));
     const codeCategories = [
       ["buildings","Buildings"],["rooms","Rooms"],["priorities","Priorities"],["work_order_types","Work order types"],
-      ["assign_to","Assign to"],["issue_to_employee_number","Issue to employee #"],["job_type","Job type"],["custom:future","Custom future"]
+      ["assign_to","Assign to"],["issue_to_employee_number","Issue to employee #"],["job_type","Job type"],
+      ["assets","Assets"],["technician_roster","Technician roster"],["custom:inventory_parts","Inventory parts"],["custom:future","Custom future"]
     ];
     const $ = (id) => document.getElementById(id);
+    const OPERATOR_API_KEY_STORAGE_KEY = "cmmsOperatorApiKey";
+    function loadSavedApiKey() {
+      try { state.defaultApiKey = localStorage.getItem(OPERATOR_API_KEY_STORAGE_KEY) || ""; }
+      catch { state.defaultApiKey = ""; }
+    }
+    function rememberApiKey(value) {
+      const key = String(value || "").trim();
+      state.defaultApiKey = key;
+      try {
+        if (key) localStorage.setItem(OPERATOR_API_KEY_STORAGE_KEY, key);
+        else localStorage.removeItem(OPERATOR_API_KEY_STORAGE_KEY);
+      } catch {}
+    }
+    function forgetApiKey() {
+      state.defaultApiKey = "";
+      try { localStorage.removeItem(OPERATOR_API_KEY_STORAGE_KEY); } catch {}
+      ["tKey", "eKey", "bKey"].forEach(id => { if ($(id)) $(id).value = ""; });
+      if ($("bOut")) buildCall();
+    }
+    function collapsiblePanel(title, body, options = {}) {
+      const open = options.open ? " open" : "";
+      const dark = options.dark ? " collapsible-dark" : "";
+      return `<details class="collapsible-panel${dark}"${open}><summary><span>${escapeHtml(title)}</span></summary><div class="collapsible-content">${body}</div></details>`;
+    }
+    function tableScroll(html) { return `<div class="table-scroll">${html}</div>`; }
     async function api(path, opts = {}) {
       const res = await fetch(path, { credentials: "same-origin", ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
       const text = await res.text();
@@ -380,6 +715,37 @@ PORTAL_HTML = r"""<!doctype html>
       try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!res.ok) throw Object.assign(new Error(data.detail || "Request failed"), { data, status: res.status });
       return data;
+    }
+    function showLogin() {
+      $("docsView").style.display = "none";
+      $("appView").style.display = "none";
+      $("loginView").style.display = "grid";
+    }
+    async function showPublicDocs() {
+      $("loginView").style.display = "none";
+      $("appView").style.display = "none";
+      $("docsView").style.display = "block";
+      await loadPublicDocs();
+    }
+    async function loadPublicDocs() {
+      const target = $("publicDocs");
+      target.innerHTML = `<div class="docs-card"><p class="muted">Loading documentation...</p></div>`;
+      try {
+        const docs = await api("/api/public/documentation");
+        target.innerHTML = docs.map(renderPublicDoc).join("");
+      } catch (e) {
+        target.innerHTML = `<div class="docs-card"><h2>Documentation unavailable</h2><p class="muted">${escapeHtml(e.message)}</p></div>`;
+      }
+    }
+    function renderPublicDoc(doc) {
+      const sections = (doc.sections || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+      return `<article class="docs-card"><h2>${escapeHtml(doc.title)}</h2><p class="muted">${escapeHtml(doc.summary)}</p>${sections ? `<ul>${sections}</ul>` : ""}</article>`;
+    }
+    function registerOfflineShell() {
+      if (!("serviceWorker" in navigator)) return;
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/offline-sw.js").catch(() => {});
+      });
     }
     async function login() {
       try {
@@ -389,12 +755,13 @@ PORTAL_HTML = r"""<!doctype html>
     }
     async function logout() { await api("/auth/logout", { method: "POST" }).catch(() => {}); location.reload(); }
     async function boot() {
+      loadSavedApiKey();
       try {
         state.me = await api("/api/me");
-        $("loginView").style.display = "none"; $("appView").style.display = "grid";
+        $("loginView").style.display = "none"; $("docsView").style.display = "none"; $("appView").style.display = "grid";
         $("userText").textContent = `${state.me.username} (${state.me.role})`;
         renderNav(); await refreshBase(); show("dashboard");
-      } catch { $("loginView").style.display = "grid"; $("appView").style.display = "none"; }
+      } catch { showLogin(); }
     }
     async function refreshBase() {
       state.envs = await api("/api/environments").catch(() => []);
@@ -403,29 +770,135 @@ PORTAL_HTML = r"""<!doctype html>
       $("healthText").textContent = health ? "Local API online" : "API offline";
     }
     function renderNav() {
-      $("nav").innerHTML = menu.map(([id,label,admin,icon]) => {
-        if (admin && state.me.role !== "admin") return "";
-        return `<button class="${state.page===id?'active':''} ${admin?'admin-only':''}" onclick="show('${id}')"><span class="cmms-nav-icon">${icon}</span><span>${label}</span></button>`;
+      $("nav").innerHTML = menuGroups.map(([group, ids]) => {
+        const items = ids.map(id => menuById[id]).filter(Boolean).filter(([, , admin]) => !admin || state.me?.role === "admin");
+        if (!items.length) return "";
+        return `<div class="nav-group"><div class="nav-group-title">${group}</div>${items.map(([id,label,admin,icon]) =>
+          `<button class="${state.page===id?'active':''} ${admin?'admin-only':''}" onclick="show('${id}')"><span class="cmms-nav-icon">${icon}</span><span>${label}</span>${admin ? '<span class="admin-badge">Admin</span>' : ''}</button>`
+        ).join("")}</div>`;
       }).join("");
     }
-    function pageShell(title, html) { $("pageTitle").textContent = title; $("pageActions").innerHTML = ""; $("page").innerHTML = html; renderNav(); }
+    function toggleNav() { $("appView").classList.toggle("nav-open"); }
+    function pageShell(title, html, actions = "", subtitle = "") {
+      $("pageTitle").textContent = title;
+      $("pageActions").innerHTML = actions;
+      const subtitleEl = $("pageSubtitle");
+      if (subtitleEl) subtitleEl.textContent = subtitle;
+      $("page").innerHTML = html;
+      $("appView").classList.remove("nav-open");
+      renderNav();
+    }
     function envOptions() { return state.envs.map(e => `<option value="${e.environment_code}">${e.environment_code} - ${e.name}</option>`).join(""); }
     function show(id) {
       state.page = id; renderNav();
-      const handlers = { dashboard, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system };
+      const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system };
       handlers[id]();
     }
     async function dashboard() {
-      pageShell("Dashboard", `<div class="grid">
-        <div class="card span-3"><div class="card-body"><div class="metric">${state.envs.length}</div><div class="muted">Environments</div></div></div>
-        <div class="card span-3"><div class="card-body"><div class="metric">${state.keys.length}</div><div class="muted">API keys</div></div></div>
-        <div class="card span-3"><div class="card-body"><div class="metric">${state.me.role}</div><div class="muted">Current role</div></div></div>
-        <div class="card span-3"><div class="card-body"><div class="metric">Local</div><div class="muted">Model runtime</div></div></div>
+      pageShell("Dashboard", `<div class="section-stack">
+        <div class="dashboard-hero">
+          <div class="card"><h2>Control plane readiness</h2><div class="card-body"><div class="metric">${state.envs.length} environments</div><p class="muted">Local advisory workflow with deterministic validation gates.</p></div></div>
+          <div class="card"><h2>System status</h2><div class="card-body dashboard-status-list">
+            <div class="status-row"><span>API keys</span><strong>${state.keys.length}</strong></div>
+            <div class="status-row"><span>Current role</span><strong>${state.me.role}</strong></div>
+            <div class="status-row"><span>Model runtime</span><strong>Local</strong></div>
+          </div></div>
+        </div>
         <div class="card span-12"><h2>Safety posture</h2><div class="card-body">Advisory mode only. No CMMS write-back, work order creation, approval, or email sending occurs.</div></div>
         <div class="card span-12"><h2>Regression Health</h2><div class="card-body" id="regressionDashboard"><p class="muted">Loading regression dashboard...</p></div></div>
-      </div>`);
+      </div>`, "", "Overview first; detailed checks stay grouped below.");
       const data = await api("/api/admin/regression-dashboard").catch(e => ({ error: e.message }));
       renderRegressionDashboard(data);
+    }
+
+    function orchestration() {
+      pageShell("Orchestration", `<div class="grid">
+        <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Instruction</div><div class="playground-subtitle">cmms-intake orchestration_summary</div></div><span class="pill">dry-run</span></div><div class="card-body stack">
+          <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="oKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
+          <label>Environment</label><select id="oEnv">${envOptions()}</select>
+          <label>Request</label><textarea id="oText" class="compact-textarea orchestration-textarea">Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.</textarea>
+          <div class="compact-actions"><button id="oRunBtn" onclick="runOrchestration()">Run Orchestration</button><button class="secondary" onclick="setOrchestrationExample()">Reset Example</button></div>
+        </div></div>
+        <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Execution Plan</div><div class="playground-subtitle" id="oRunLabel">No run yet</div></div><span id="oStatus" class="pill">Ready</span></div>
+          <div class="run-surface">
+            <div id="orchestrationSummary" class="readiness"><strong>Orchestration summary</strong><div class="muted">Run a request to view the end-to-end plan.</div></div>
+            <div class="result-grid">
+              ${collapsiblePanel("Actions", `<div id="orchestrationActions"><span class="muted">No actions yet.</span></div>`, { open: true })}
+              ${collapsiblePanel("Inventory + Procurement", `<div id="orchestrationProcurement"><span class="muted">No inventory check yet.</span></div>`, { open: true })}
+            </div>
+            ${collapsiblePanel("Raw response", `<div class="status-line collapsible-toolbar">${outputToolbar("orchestrationOut")}</div><pre id="orchestrationOut">{}</pre>`, { dark: true })}
+          </div>
+        </div>
+      </div>`, "", "Focused view for one natural-language instruction and its deterministic multi-action plan.");
+    }
+
+    function setOrchestrationExample() {
+      if ($("oText")) $("oText").value = "Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.";
+    }
+
+    async function runOrchestration() {
+      const key = $("oKey")?.value || state.defaultApiKey || "";
+      rememberApiKey(key);
+      const payload = {
+        text: $("oText").value,
+        environment_code: $("oEnv").value
+      };
+      if ($("oStatus")) { $("oStatus").textContent = "Running"; $("oStatus").className = "pill warning"; }
+      try {
+        const data = await api("/api/ai/cmms-intake", { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(payload) });
+        state.lastTestResponse = data;
+        if ($("oRunLabel")) $("oRunLabel").textContent = `Run ${data.run_id || ""}`;
+        renderOrchestrationSummary(data);
+        renderOrchestrationActions(data);
+        setConsoleOutput("orchestrationOut", data);
+        if ($("oStatus")) {
+          const status = data.orchestration_summary?.status || "completed";
+          $("oStatus").textContent = status;
+          $("oStatus").className = `pill ${status === "dry_run" || status === "needs_review" ? "warning" : status === "failed" || status === "blocked" ? "danger" : "ok"}`;
+        }
+      } catch (e) {
+        if ($("oStatus")) { $("oStatus").textContent = "Failed"; $("oStatus").className = "pill danger"; }
+        if ($("orchestrationSummary")) $("orchestrationSummary").innerHTML = `<strong>Run failed</strong><div class="muted">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderOrchestrationSummary(data) {
+      const summary = data.orchestration_summary || {};
+      if (!$("orchestrationSummary")) return;
+      if (!summary.schema) {
+        $("orchestrationSummary").innerHTML = '<strong>No orchestration summary</strong><div class="muted">Response did not include orchestration_summary.</div>';
+        return;
+      }
+      const steps = summary.steps || {};
+      $("orchestrationSummary").className = `readiness ${summary.status === "blocked" || summary.status === "failed" ? "fail" : summary.status === "needs_review" || summary.status === "dry_run" ? "warn" : ""}`;
+      $("orchestrationSummary").innerHTML = `<strong>${escapeHtml(summary.operator_message || "Orchestration summary")}</strong>
+        <div class="metadata-grid" style="margin-top:10px">
+          <div class="metadata-item"><label>Status</label><div class="metadata-value">${escapeHtml(summary.status || "")}</div></div>
+          <div class="metadata-item"><label>Asset</label><div class="metadata-value">${escapeHtml(summary.asset_code || "")}</div></div>
+          <div class="metadata-item"><label>Priority</label><div class="metadata-value">${escapeHtml(summary.priority || "")}</div></div>
+          <div class="metadata-item"><label>Technician</label><div class="metadata-value">${escapeHtml(steps.assignment?.technician || "")}</div></div>
+          <div class="metadata-item"><label>Inventory</label><div class="metadata-value">${escapeHtml(steps.inventory?.status || "")}</div></div>
+          <div class="metadata-item"><label>Procurement</label><div class="metadata-value">${escapeHtml(steps.procurement?.status || "")}</div></div>
+        </div>`;
+    }
+
+    function renderOrchestrationActions(data) {
+      const summary = data.orchestration_summary || {};
+      const actions = data.action_plan?.actions || data.result?.action_plan?.actions || [];
+      const procurement = data.procurement_request || data.result?.procurement_request || {};
+      if ($("orchestrationActions")) {
+        $("orchestrationActions").innerHTML = actions.length ? `<table><thead><tr><th>Action</th><th>Status</th><th>Method</th><th>Review</th></tr></thead><tbody>${actions.map(action => `<tr><td>${escapeHtml(action.action_id || "")}</td><td>${escapeHtml(action.status || "")}</td><td>${escapeHtml(action.method || action.type || "")}</td><td>${action.requires_review ? "Yes" : "No"}</td></tr>`).join("")}</tbody></table>` : '<span class="muted">No actions returned.</span>';
+      }
+      if ($("orchestrationProcurement")) {
+        const shortages = summary.steps?.inventory?.shortage_items || [];
+        $("orchestrationProcurement").innerHTML = `<div class="stack">
+          <div><strong>Inventory:</strong> ${escapeHtml(summary.steps?.inventory?.status || "")}</div>
+          <div><strong>Purchase request:</strong> ${escapeHtml(summary.steps?.procurement?.status || procurement.status || "")}</div>
+          <div class="muted">${escapeHtml(summary.steps?.procurement?.reason || procurement.reason || "")}</div>
+          ${shortages.length ? `<table><thead><tr><th>Part</th><th>On Hand</th><th>Shortage</th></tr></thead><tbody>${shortages.map(item => `<tr><td>${escapeHtml(item.part_number || "")}</td><td>${item.quantity_on_hand ?? ""}</td><td>${item.shortage_quantity ?? ""}</td></tr>`).join("")}</tbody></table>` : ""}
+          ${actions.some(action => action.action_id === "create_purchase_request") ? '<span class="pill warning">create_purchase_request</span>' : ""}
+        </div>`;
+      }
     }
 
     function renderRegressionDashboard(data) {
@@ -438,13 +911,15 @@ PORTAL_HTML = r"""<!doctype html>
         <div class="card span-3"><div class="card-body"><div class="metric">${readiness.failed ?? 0}</div><div class="muted">Required suites failed</div></div></div>
         <div class="card span-3"><div class="card-body"><div class="metric">${readiness.not_run ?? 0}</div><div class="muted">Required suites not run</div></div></div>
         <div class="card span-3"><div class="card-body"><div class="metric">${workflow.failed ?? 0}</div><div class="muted">Recent workflow failures</div></div></div>
-        <div class="card span-12"><h2>Required Suite Readiness</h2><div class="card-body">${renderRequiredSuiteReadiness(readiness.items || [])}</div></div>
-        <div class="card span-12"><h2>Latest Suite Runs</h2><div class="card-body">${renderDashboardSuiteRuns(data.latest_suite_runs || [])}</div></div>
-        <div class="card span-6"><h2>Recent Prompt Comparisons</h2><div class="card-body">${renderDashboardComparisons(data.recent_prompt_comparisons || [])}</div></div>
-        <div class="card span-6"><h2>Recent Promotions</h2><div class="card-body">${renderDashboardPromotions(data.recent_promotions || [])}</div></div>
         <div class="card span-4"><h2>Workflow Summary</h2><div class="card-body">${renderWorkflowSummary(workflow)}</div></div>
         <div class="card span-4"><h2>Top Failing Fields</h2><div class="card-body">${renderFailingFields(data.top_failing_fields || [])}</div></div>
         <div class="card span-4"><h2>Recent Validation Failures</h2><div class="card-body">${renderValidationFailures(data.recent_validation_failures || [])}</div></div>
+        <div class="span-12 dashboard-regression-details">${collapsiblePanel("Regression details", `<div class="grid">
+          <div class="card span-12"><h2>Required Suite Readiness</h2><div class="card-body">${tableScroll(renderRequiredSuiteReadiness(readiness.items || []))}</div></div>
+          <div class="card span-12"><h2>Latest Suite Runs</h2><div class="card-body">${tableScroll(renderDashboardSuiteRuns(data.latest_suite_runs || []))}</div></div>
+          <div class="card span-6"><h2>Recent Prompt Comparisons</h2><div class="card-body">${tableScroll(renderDashboardComparisons(data.recent_prompt_comparisons || []))}</div></div>
+          <div class="card span-6"><h2>Recent Promotions</h2><div class="card-body">${tableScroll(renderDashboardPromotions(data.recent_promotions || []))}</div></div>
+        </div>`)}</div>
       </div>`;
     }
 
@@ -488,57 +963,57 @@ PORTAL_HTML = r"""<!doctype html>
     function test() {
       pageShell("Test Console", `<div class="grid">
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Run console</div><div class="playground-subtitle">Text and voice.</div></div><span class="pill">API</span></div><div class="card-body stack">
-          <label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
-          <label>Mode</label><select id="tEndpoint" onchange="renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select>
-          <label>Environment</label><select id="tEnv">${envOptions()}</select>
+          <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
+          <div class="compact-field-row compact-field-row-two"><div><label>Mode</label><div class="select-wrap"><select id="tEndpoint" class="cmms-select" onchange="renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select></div></div>
+          <div><label>Environment</label><div class="select-wrap"><select id="tEnv" class="cmms-select">${envOptions()}</select></div></div></div>
           <div id="testModeHelp" class="notice"></div>
           <div id="testInputPanel"></div>
         </div></div>
         <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: none</div></div><span id="runStatus" class="pill">Ready</span></div>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run CMMS Intake to evaluate whether enough validated information exists for a human-controlled workflow.</div></div>
-            <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run CMMS Intake to extract metadata.</span></div></div>
-            <div class="ai-panel"><h3>Safety Review</h3><div id="tReview"><span class="muted">Run CMMS Intake to see advisory safety review.</span></div></div>
-            <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">Run CMMS Intake to see trace steps.</span></div></div>
+            ${collapsiblePanel("Intake Metadata", `<div id="tMetadata"><span class="muted">Run CMMS Intake to extract metadata.</span></div>`)}
+            ${collapsiblePanel("Safety Review", `<div id="tReview"><span class="muted">Run CMMS Intake to see advisory safety review.</span></div>`)}
+            ${collapsiblePanel("Workflow Trace", `<div id="tTrace"><span class="muted">Run CMMS Intake to see trace steps.</span></div>`)}
             <div class="result-grid">
-              <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">Run a request to see contract validation.</span></div></div>
-              <div class="ai-panel"><h3>Environment Validation</h3><div id="tValidation"><span class="muted">Run a request to see environment validation.</span></div></div>
+              ${collapsiblePanel("Contract Validation", `<div id="tContract"><span class="muted">Run a request to see contract validation.</span></div>`)}
+              ${collapsiblePanel("Environment Validation", `<div id="tValidation"><span class="muted">Run a request to see environment validation.</span></div>`)}
             </div>
-            <div class="ai-panel ai-panel-dark"><div class="status-line"><strong>Extracted JSON</strong>${outputToolbar("tOut")}</div><pre id="tOut">{}</pre></div>
+            ${collapsiblePanel("Extracted JSON", `<div class="status-line collapsible-toolbar">${outputToolbar("tOut", { hide: true, clear: true })}</div><pre id="tOut" class="console-output">{}</pre>`, { open: true, dark: true })}
           </div>
         </div>
-      </div>`);
+      </div>`, "", "Run advisory AI endpoints with the minimum controls visible first.");
       renderTestInputPanel();
       renderTestModeHelp();
     }
     function emailIntake() {
       pageShell("Email Intake", `<div class="grid">
-        <div class="card playground span-5"><div class="playground-header"><div><div class="playground-title">Email</div><div class="playground-subtitle">Paste or import.</div></div><span class="pill">email_api</span></div><div class="card-body stack">
-          <label>API key</label><input id="eKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
+        <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Email</div><div class="playground-subtitle">Paste or import.</div></div><span class="pill">email_api</span></div><div class="card-body stack">
+          <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="eKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
           <label>Environment</label><select id="eEnv">${envOptions()}</select>
           <div class="ai-panel stack email-compose">
             <label>From</label><input id="emailFrom" placeholder="tenant@example.com">
             <label>To</label><input id="emailTo" placeholder="maintenance@example.com">
             <label>Subject</label><input id="emailSubject" placeholder="Leak in ARC 205">
-            <label>Body</label><textarea id="emailBody" placeholder="Paste email body"></textarea>
+            <label>Body</label><textarea id="emailBody" class="compact-textarea" placeholder="Paste email body"></textarea>
             <input id="emailImportFile" type="file" accept=".eml,.txt,message/rfc822,text/plain" style="display:none" onchange="handleEmailImport(event)">
-            <div class="button-grid email-actions"><button class="secondary" onclick="$('emailImportFile').click()">Import</button><button class="secondary" onclick="clearEmailIntake()">Clear</button><button id="eRunBtn" onclick="runEmailIntake()">Run Email</button></div>
+            <div class="compact-actions email-actions"><button class="secondary" onclick="$('emailImportFile').click()">Import</button><button class="secondary" onclick="clearEmailIntake()">Clear</button><button id="eRunBtn" onclick="runEmailIntake()">Run Email</button></div>
           </div>
         </div></div>
-        <div class="card playground span-7"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: email API</div></div><span id="runStatus" class="pill">Ready</span></div>
+        <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: email API</div></div><span id="runStatus" class="pill">Ready</span></div>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run Email to evaluate the request.</div></div>
-            <div class="ai-panel"><h3>Intake Metadata</h3><div id="tMetadata"><span class="muted">Run Email to extract metadata.</span></div></div>
-            <div class="ai-panel"><h3>Safety Review</h3><div id="tReview"><span class="muted">Run Email to see advisory safety review.</span></div></div>
-            <div class="ai-panel"><h3>Workflow Trace</h3><div id="tTrace"><span class="muted">No run yet.</span></div></div>
+            ${collapsiblePanel("Intake Metadata", `<div id="tMetadata"><span class="muted">Run Email to extract metadata.</span></div>`)}
+            ${collapsiblePanel("Safety Review", `<div id="tReview"><span class="muted">Run Email to see advisory safety review.</span></div>`)}
+            ${collapsiblePanel("Workflow Trace", `<div id="tTrace"><span class="muted">No run yet.</span></div>`)}
             <div class="result-grid">
-              <div class="ai-panel"><h3>Contract Validation</h3><div id="tContract"><span class="muted">No run yet.</span></div></div>
-              <div class="ai-panel"><h3>Environment Validation</h3><div id="tValidation"><span class="muted">No run yet.</span></div></div>
+              ${collapsiblePanel("Contract Validation", `<div id="tContract"><span class="muted">No run yet.</span></div>`)}
+              ${collapsiblePanel("Environment Validation", `<div id="tValidation"><span class="muted">No run yet.</span></div>`)}
             </div>
-            <div class="ai-panel ai-panel-dark"><div class="status-line"><strong>Extracted JSON</strong>${outputToolbar("tOut")}</div><pre id="tOut">{}</pre></div>
+            ${collapsiblePanel("Extracted JSON", `<div class="status-line collapsible-toolbar">${outputToolbar("tOut", { hide: true, clear: true })}</div><pre id="tOut" class="console-output">{}</pre>`, { open: true, dark: true })}
           </div>
         </div>
-      </div>`);
+      </div>`, "", "Turn pasted maintenance emails into controlled advisory intake drafts.");
     }
     function renderTestInputPanel() {
       if (!$("testInputPanel")) return;
@@ -546,10 +1021,10 @@ PORTAL_HTML = r"""<!doctype html>
       state.voiceSupported = Boolean(supported);
       $("testInputPanel").innerHTML = `<div class="ai-panel stack">
           <label>Content</label>
-          <textarea id="tText">The air conditioner in ARC room 205 is making loud noise and the room is too warm. My name is Leon, phone is 1234, email address is bdsrca@gmail.com. I wanted it done by the end of this week.</textarea>
-          <div class="button-grid"><button id="runTestBtn" onclick="runTest('text')">Run Text</button><button class="secondary" onclick="clearVoiceTranscript()">Clear</button><button class="secondary" onclick="openSaveCurrentTestCase()">Save as Test Case</button><button class="secondary" onclick="runMatchingTestCase()">Run Matching Test</button></div>
+          <div class="input-with-voice"><textarea id="tText" class="compact-textarea test-console-textarea">The air conditioner in ARC room 205 is making loud noise and the room is too warm. My name is Leon, phone is 1234, email address is bdsrca@gmail.com. I wanted it done by the end of this week.</textarea><button id="voiceStartBtn" class="voice-icon-button secondary" aria-label="Start voice input" title="Start voice input" onclick="startVoiceRecognition()" ${supported ? "" : "disabled"}>🎙</button></div>
+          <div class="compact-actions test-console-actions"><button id="runTestBtn" onclick="runTest('text')">Run Text</button><button class="secondary" onclick="clearVoiceTranscript()">Clear</button><button class="secondary" onclick="openSaveCurrentTestCase()">Save as Test Case</button><button class="secondary" onclick="runMatchingTestCase()">Run Matching Test</button></div>
         </div>
-        <div class="voice-panel stack">
+        <details class="voice-settings" id="voiceSettings"><summary>Voice settings</summary><div class="voice-settings-body stack">
           <div class="status-line"><strong>Speech provider: Browser Speech Recognition</strong><span id="voiceStatus" class="pill">${escapeHtml(state.voiceStatus || "Idle")}</span></div>
           ${supported ? "" : '<div class="notice warning">Speech recognition is not available in this browser. Use Chrome, Edge, or Safari, or continue with text input.</div>'}
           <label>Language</label><select id="voiceLang" onchange="updateVoiceLanguage()">
@@ -562,13 +1037,10 @@ PORTAL_HTML = r"""<!doctype html>
             <option value="ja-JP">Japanese</option>
             <option value="ko-KR">Korean</option>
           </select>
-          <div class="button-grid">
-            <button onclick="startVoiceRecognition()" ${supported ? "" : "disabled"}>Start Listening</button>
-            <button class="secondary" onclick="stopVoiceRecognition()" ${supported ? "" : "disabled"}>Stop</button>
-          </div>
+          <div class="button-grid"><button class="secondary" onclick="stopVoiceRecognition()" ${supported ? "" : "disabled"}>Stop listening</button></div>
           <div class="muted">Listening stops automatically after 5 seconds without detected speech.</div>
           <div id="voiceMessage" class="muted">Speech recognition is handled by the browser. This app does not store audio. Review the transcript before sending.</div>
-        </div>`;
+        </div></details>`;
     }
     async function renderTestModeHelp() {
       if (!$("testModeHelp")) return;
@@ -595,6 +1067,7 @@ PORTAL_HTML = r"""<!doctype html>
         $("voiceStatus").textContent = status;
         $("voiceStatus").className = `pill ${status === "Error" ? "danger" : status === "Listening" ? "ok" : status === "Processing" ? "warning" : ""}`;
       }
+      if ($("voiceStartBtn")) $("voiceStartBtn").classList.toggle("listening", status === "Listening");
       if (message && $("voiceMessage")) $("voiceMessage").textContent = message;
     }
     function transcriptValue() {
@@ -754,7 +1227,8 @@ PORTAL_HTML = r"""<!doctype html>
       }
       try {
         setRunLoading(true);
-        const data = await api("/api/ai/intake/email", { method: "POST", headers: { "x-api-key": $("eKey").value }, body: JSON.stringify(payload) });
+        rememberApiKey($("eKey").value);
+        const data = await api("/api/ai/intake/email", { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(payload) });
         if ($("inputSourceLabel")) $("inputSourceLabel").textContent = "Input source: email API";
         if ($("runStatus")) $("runStatus").textContent = "Complete";
         setConsoleOutput("tOut", data);
@@ -799,7 +1273,8 @@ PORTAL_HTML = r"""<!doctype html>
       if (source !== "text") body.source = source;
       try {
         setRunLoading(true);
-        const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": $("tKey").value }, body: JSON.stringify(body) });
+        rememberApiKey($("tKey").value);
+        const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(body) });
         const sourceLabels = { text: "text", voice_transcript: "voice transcript", email_paste: "email paste" };
         if ($("inputSourceLabel")) $("inputSourceLabel").textContent = `Input source: ${sourceLabels[source] || source}`;
         if ($("runStatus")) $("runStatus").textContent = "Complete";
@@ -1052,8 +1527,10 @@ PORTAL_HTML = r"""<!doctype html>
       return `<ul>${items.map(i=>`<li><strong>${escapeHtml(i.field)}</strong>: ${escapeHtml(i.message)} <span class="muted">(${escapeHtml(i.value ?? "")})</span></li>`).join("")}</ul>`;
     }
 
-    function outputToolbar(id) {
-      return `<span class="row" style="gap:6px"><label style="margin:0;color:inherit"><input id="${id}Pretty" type="checkbox" checked onchange="refreshConsoleOutput('${id}')"> Pretty</label><button class="secondary" onclick="copyConsoleOutput('${id}')">Copy</button><button class="secondary" onclick="downloadConsoleOutput('${id}')">Download</button></span>`;
+    function outputToolbar(id, options = {}) {
+      const hide = options.hide ? `<button class="secondary" onclick="collapseOutputPanel('${id}')">Hide</button>` : "";
+      const clear = options.clear ? `<button class="secondary" onclick="clearConsoleOutput('${id}')">Clear</button>` : "";
+      return `<span class="row" style="gap:6px"><label style="margin:0;color:inherit"><input id="${id}Pretty" type="checkbox" checked onchange="refreshConsoleOutput('${id}')"> Pretty</label><button class="secondary" onclick="copyConsoleOutput('${id}')">Copy</button><button class="secondary" onclick="downloadConsoleOutput('${id}')">Download</button>${hide}${clear}</span>`;
     }
 
     function setConsoleOutput(id, value, isJson = true) {
@@ -1075,6 +1552,15 @@ PORTAL_HTML = r"""<!doctype html>
 
     function refreshConsoleOutput(id) {
       if ($(id)) $(id).textContent = formatConsoleOutput(id);
+    }
+
+    function collapseOutputPanel(id) {
+      const panel = $(id)?.closest("details");
+      if (panel) panel.open = false;
+    }
+
+    function clearConsoleOutput(id) {
+      setConsoleOutput(id, {});
     }
 
     async function copyConsoleOutput(id) {
@@ -1185,12 +1671,12 @@ PORTAL_HTML = r"""<!doctype html>
       const runs = await api("/api/admin/test-case-runs?limit=25").catch(() => []);
       pageShell("Test Cases", `<div class="grid">
         <div class="card span-8"><h2>Saved Test Cases</h2><div class="card-body stack">
-          <div class="command-bar"><button onclick="newTestCase()">New</button><button class="secondary" onclick="runBatchTestCases()">Run Enabled Batch</button><button class="secondary" onclick="testCases()">Refresh</button></div>
-          <div id="testCaseTable">${renderTestCasesTable(cases)}</div>
+          <div class="command-bar quiet-toolbar"><button onclick="newTestCase()">New</button><button class="secondary" onclick="runBatchTestCases()">Run Enabled Batch</button><button class="secondary" onclick="testCases()">Refresh</button></div>
+          <div id="testCaseTable">${tableScroll(renderTestCasesTable(cases))}</div>
         </div></div>
         <div class="card span-4"><h2>Test Case Detail</h2><div class="card-body stack detail-form" id="testCaseDetail"><p class="muted">Select a test case or create a new one.</p></div></div>
-        <div class="card span-12"><h2>Recent Test Case Runs</h2><div class="card-body" id="testCaseRuns">${renderTestCaseRunsTable(runs)}</div></div>
-      </div>`);
+        <div class="card span-12"><h2>Recent Test Case Runs</h2><div class="card-body" id="testCaseRuns">${tableScroll(renderTestCaseRunsTable(runs))}</div></div>
+      </div>`, "", "Review saved cases and recent runs without showing every test control at once.");
     }
 
     function renderTestCasesTable(rows) {
@@ -1309,7 +1795,7 @@ PORTAL_HTML = r"""<!doctype html>
         </div></div>
         <div class="card span-4"><h2>Suite Detail</h2><div class="card-body stack detail-form" id="testSuiteDetail"><p class="muted">Select a suite or create a new one.</p></div></div>
         <div class="card span-12"><h2>Suite Runs</h2><div class="card-body" id="testSuiteRuns">${renderTestSuiteRunsTable(runs)}</div></div>
-      </div>`);
+      </div>`, "", "Review output contracts and test schema changes before promotion.");
     }
 
     function renderTestSuitesTable(rows) {
@@ -1426,20 +1912,21 @@ PORTAL_HTML = r"""<!doctype html>
       pageShell("API Call Builder", `<div class="grid">
         <div class="card span-4"><h2>Inputs</h2><div class="card-body stack">
           <label>Base URL</label><input id="bBase" value="${base}">
-          <label>API key</label><input id="bKey" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key">
-          <label>Endpoint</label><select id="bEndpoint" onchange="buildCall()"><option value="cmms-intake">CMMS Intake</option><option value="intake/email">Email Intake</option><option value="cmms-assistant">CMMS Assistant</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select>
-          <label>Environment</label><select id="bEnv" onchange="buildCall()">${envOptions()}</select>
-          <label>Input source</label><select id="bSource" onchange="buildCall()"><option value="text">text</option><option value="voice_transcript">voice_transcript</option><option value="email_paste">email_paste</option><option value="email_mailbox">email_mailbox_reserved</option></select>
-          <label>Text</label><textarea id="bText" oninput="buildCall()">The air conditioner in ARC room 205 is making loud noise.</textarea>
+          <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="bKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value); buildCall()"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
+          <div class="compact-field-row compact-field-row-two"><div><label>Endpoint</label><select id="bEndpoint" onchange="buildCall()"><option value="cmms-intake">CMMS Intake</option><option value="intake/email">Email Intake</option><option value="cmms-assistant">CMMS Assistant</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select></div>
+          <div><label>Environment</label><select id="bEnv" onchange="buildCall()">${envOptions()}</select></div></div>
+          <div class="compact-field-row compact-field-row-two"><div><label>Input source</label><select id="bSource" onchange="buildCall()"><option value="text">text</option><option value="voice_transcript">voice_transcript</option><option value="email_paste">email_paste</option><option value="email_mailbox">email_mailbox_reserved</option></select></div>
+          <div><label>Example language</label><select id="bLanguage" onchange="buildCall()"><option value="curl">curl</option><option value="powershell">PowerShell</option><option value="javascript">JavaScript fetch</option><option value="python">Python requests</option></select></div></div>
+          <label>Text</label><textarea id="bText" class="compact-textarea" oninput="buildCall()">The air conditioner in ARC room 205 is making loud noise.</textarea>
           <label><input id="bReturnValidation" type="checkbox" checked style="width:auto" onchange="buildCall()"> Include readiness validation in examples</label>
-          <div class="button-grid"><button onclick="buildCall()">Generate</button><button class="secondary" onclick="runBuilderValidation()">Run + Validate</button></div>
+          <div class="compact-actions"><button onclick="buildCall()">Generate</button><button class="secondary" onclick="runBuilderValidation()">Run + Validate</button></div>
         </div></div>
-        <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Generated calls</div><div class="playground-subtitle">PowerShell, curl, request body, response contract, and readiness logic.</div></div><span class="pill">Builder</span></div><div class="run-surface">
-          <div id="bDoc" class="ai-panel"></div>
+        <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Generated calls</div><div class="playground-subtitle">Selectable client examples, request body, response contract, and readiness logic.</div></div><span class="pill">Builder</span></div><div class="run-surface">
+          ${collapsiblePanel("Endpoint notes", `<div id="bDoc"></div>`)}
           <div id="bValidationOut" class="readiness warn"><strong>Validation preview</strong><div class="muted">Use Run + Validate to call the endpoint and check whether the response has enough validated information.</div></div>
-          <div class="ai-panel ai-panel-dark"><div class="status-line"><strong>Generated examples</strong>${outputToolbar("bOut")}</div><pre id="bOut" class="code-output"></pre></div>
+          ${collapsiblePanel("Generated examples", `<div class="status-line collapsible-toolbar">${outputToolbar("bOut")}</div><pre id="bOut" class="code-output"></pre>`, { open: true, dark: true })}
         </div></div>
-      </div>`);
+      </div>`, "", "Compose controlled API calls without exposing every secondary option up front.");
       buildCall();
     }
     function buildCall() {
@@ -1448,12 +1935,26 @@ PORTAL_HTML = r"""<!doctype html>
       const body = JSON.stringify(bodyObj, null, 2);
       const uri = `${$("bBase").value}/api/ai/${ep}`;
       const includeValidation = $("bReturnValidation").checked && (ep === "cmms-intake" || ep === "intake/email");
-      const psValidation = includeValidation ? `\n\n# Readiness check: advisory only, does not create a work order\n$ContractOk = $Response.contract.valid\n$EnvironmentOk = $Response.ai_validation.valid\n$CanCreateWorkOrder = $Response.validation.can_create_work_order\n$MissingFields = $Response.validation.missing_fields -join ", "\n[pscustomobject]@{\n  ContractValidation = $ContractOk\n  EnvironmentValidation = $EnvironmentOk\n  EnoughInformation = $CanCreateWorkOrder\n  MissingFields = $MissingFields\n  AdvisoryOnly = $true\n}` : "";
-      const ps = `$Headers = @{ "x-api-key" = "${$("bKey").value}" }\n$Body = @'\n${body}\n'@\n$Response = Invoke-RestMethod -Method POST -Uri "${uri}" -Headers $Headers -ContentType "application/json" -Body $Body\n$Response | ConvertTo-Json -Depth 20${psValidation}`;
-      const curl = `curl -X POST "${uri}" \\\n  -H "x-api-key: ${$("bKey").value}" \\\n  -H "Content-Type: application/json" \\\n  -d '${body.replaceAll("'", "\\'")}'`;
+      const apiKey = $("bKey").value;
+      const examples = builderLanguageExamples(uri, body, apiKey, includeValidation);
+      const language = $("bLanguage").value;
+      const generated = examples[language] || examples.curl;
+      const languageLabels = { curl: "curl", powershell: "PowerShell", javascript: "JavaScript fetch", python: "Python requests" };
+      const label = languageLabels[language] || "curl";
       const responseNotes = endpointDoc(ep, includeValidation);
       $("bDoc").innerHTML = responseNotes;
-      setConsoleOutput("bOut", `PowerShell:\n${ps}\n\ncurl:\n${curl}\n\nJSON body:\n${body}\n\nExpected response fields:\n${expectedFields(ep).join("\\n")}`, false);
+      setConsoleOutput("bOut", `Generated example: ${label}\n${generated}\n\nJSON body:\n${body}\n\nExpected response fields:\n${expectedFields(ep).join("\\n")}`, false);
+    }
+
+    function builderLanguageExamples(uri, body, apiKey, includeValidation) {
+      const psValidation = includeValidation ? `\n\n# Readiness check: advisory only, does not create a work order\n$ContractOk = $Response.contract.valid\n$EnvironmentOk = $Response.ai_validation.valid\n$CanCreateWorkOrder = $Response.validation.can_create_work_order\n$MissingFields = $Response.validation.missing_fields -join ", "\n[pscustomobject]@{\n  ContractValidation = $ContractOk\n  EnvironmentValidation = $EnvironmentOk\n  EnoughInformation = $CanCreateWorkOrder\n  MissingFields = $MissingFields\n  AdvisoryOnly = $true\n}` : "";
+      const ps = `$Headers = @{ "x-api-key" = "${apiKey}" }\n$Body = @'\n${body}\n'@\n$Response = Invoke-RestMethod -Method POST -Uri "${uri}" -Headers $Headers -ContentType "application/json" -Body $Body\n$Response | ConvertTo-Json -Depth 20${psValidation}`;
+      const curl = `curl -X POST "${uri}" \\\n  -H "x-api-key: ${apiKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '${body.replaceAll("'", "\\'")}'`;
+      const jsValidation = includeValidation ? `\nconst ready = Boolean(data.contract?.valid && data.ai_validation?.valid && data.validation?.can_create_work_order);\nconsole.log({ ready, missing_fields: data.validation?.missing_fields ?? [], advisory_only: true });` : "";
+      const javascript = `const response = await fetch("${uri}", {\n  method: "POST",\n  headers: {\n    "x-api-key": "${apiKey}",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(${body})\n});\n\nif (!response.ok) throw new Error(await response.text());\nconst data = await response.json();\nconsole.log(data);${jsValidation}`;
+      const pyValidation = includeValidation ? `\nready = bool(data.get("contract", {}).get("valid") and data.get("ai_validation", {}).get("valid") and data.get("validation", {}).get("can_create_work_order"))\nprint({\n    "ready": ready,\n    "missing_fields": data.get("validation", {}).get("missing_fields", []),\n    "advisory_only": True,\n})` : "";
+      const python = `import json\nimport requests\n\npayload = json.loads(${JSON.stringify(body)})\nresponse = requests.post(\n    "${uri}",\n    headers={\n        "x-api-key": "${apiKey}",\n        "Content-Type": "application/json",\n    },\n    json=payload,\n    timeout=30,\n)\nresponse.raise_for_status()\ndata = response.json()\nprint(json.dumps(data, indent=2))${pyValidation}`;
+      return { curl, powershell: ps, javascript, python };
     }
 
     function builderRequestBody(endpoint) {
@@ -1494,7 +1995,8 @@ PORTAL_HTML = r"""<!doctype html>
       const ep = $("bEndpoint").value;
       const body = builderRequestBody(ep);
       try {
-        const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": $("bKey").value }, body: JSON.stringify(body) });
+        rememberApiKey($("bKey").value);
+        const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(body) });
         if (ep === "cmms-intake") {
           const summary = readinessSummary(data);
           $("bValidationOut").className = `readiness ${summary.cls}`;
@@ -1530,15 +2032,16 @@ PORTAL_HTML = r"""<!doctype html>
       <div class="command-bar">
         <span class="muted">Environment</span><select id="envPick" onchange="state.selectedEnv=this.value; environments()">${state.envs.map(e=>`<option value="${e.environment_code}" ${e.environment_code===state.selectedEnv?"selected":""}>${e.environment_code} - ${e.name}</option>`).join("")}</select>
         <button class="secondary" onclick="showCreateEnv()">Create environment</button>
+        <button class="secondary" onclick="seedDemoEnvironment()">Load demo setup</button>
         <button class="secondary" onclick="environments()">Refresh</button>
       </div>
       <div class="tabs">
         <button class="${state.envTab==='codes'?'active':''}" onclick="state.envTab='codes'; renderEnvironmentTab()">Code Lists</button>
         <button class="${state.envTab==='validation'?'active':''}" onclick="state.envTab='validation'; renderEnvironmentTab()">Validation Rules</button>
         <button class="${state.envTab==='connector'?'active':''}" onclick="state.envTab='connector'; renderEnvironmentTab()">CMMS Connector</button>
-        <button disabled>Overview</button><button disabled>Test Console</button><button disabled>API Examples</button><button disabled>Usage Logs</button><button disabled>Settings</button>
       </div>
-      <div id="envTab">${renderEnvironmentTabContent()}</div>`);
+      <details class="coming-soon-tabs"><summary>Coming soon</summary><div class="tabs"><button disabled>Overview</button><button disabled>Test Console</button><button disabled>API Examples</button><button disabled>Usage Logs</button><button disabled>Settings</button></div></details>
+      <div id="envTab">${renderEnvironmentTabContent()}</div>`, "", "Manage environment-specific codes, validation rules, and CMMS connector settings.");
     }
     async function createEnv() {
       await api("/api/admin/environments", { method: "POST", body: JSON.stringify({ environment_code: $("envCode").value, name: $("envName").value, enabled: true }) });
@@ -1550,6 +2053,17 @@ PORTAL_HTML = r"""<!doctype html>
       if (!code) return;
       const name = prompt("Environment name", "Test Environment") || code;
       api("/api/admin/environments", { method: "POST", body: JSON.stringify({ environment_code: code, name, enabled: true }) }).then(async () => { await refreshBase(); state.selectedEnv = code.toUpperCase(); environments(); });
+    }
+
+    async function seedDemoEnvironment() {
+      const result = await api(`/api/admin/environments/${state.selectedEnv}/demo-setup`, { method: "POST" });
+      await refreshBase();
+      await loadEnvironmentCodes();
+      await loadValidationRules();
+      await loadCmmsConnector();
+      await loadCmmsPushEvents();
+      renderEnvironmentTab();
+      alert(`Demo setup loaded for ${result.environment_code}: ${result.counts.assets || 0} assets, ${result.counts.technician_roster || 0} technicians, dry-run connector ready.`);
     }
 
     async function loadEnvironmentCodes() {
@@ -1862,9 +2376,9 @@ PORTAL_HTML = r"""<!doctype html>
     async function contracts() {
       const data = await api("/api/admin/output-contracts");
       pageShell("AI Output Contracts", `<div class="contracts-layout">
-        <div class="card"><h2>Contracts</h2><div class="card-body">${renderContractsTable(data)}</div></div>
+        <div class="card"><h2>Contracts</h2><div class="card-body">${tableScroll(renderContractsTable(data))}</div></div>
         <div class="card"><h2>Contract Detail</h2><div class="card-body stack detail-form" id="contractDetail"><p class="muted">Select a contract to view or edit.</p></div></div>
-      </div>`);
+      </div>`, "", "Review output contracts and test schema changes before promotion.");
     }
 
     function renderContractsTable(rows) {
@@ -2260,9 +2774,9 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="muted">Blank means all environments.</div>
           <button onclick="createKey()">Generate</button>
         </div></div>
-        <div class="card span-8"><h2>Keys</h2><div class="card-body">${renderApiKeyTable(data)}</div></div>
+        <div class="card span-8"><h2>Keys</h2><div class="card-body">${tableScroll(renderApiKeyTable(data))}</div></div>
         <div class="card span-12"><h2>Generated key output</h2><pre id="kOut">{}</pre></div>
-      </div>`);
+      </div>`, "", "Manage generated API keys and keep scoped access visible.");
     }
     function csvList(value) {
       return String(value || "").split(/[,\n]/).map(v => v.trim()).filter(Boolean);
@@ -2357,6 +2871,7 @@ PORTAL_HTML = r"""<!doctype html>
       if (!rows || !rows.length) return "<p class='muted'>No records.</p>";
       return `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}${action?"<th>Action</th>":""}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c] ?? ""}</td>`).join("")}${action?`<td><button class="danger" onclick="${action}('${r.key_id}')">Disable</button></td>`:""}</tr>`).join("")}</tbody></table>`;
     }
+    registerOfflineShell();
     boot();
   </script>
 </body>
