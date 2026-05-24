@@ -127,7 +127,15 @@ print(response.json())
 
 ### POST /api/ai/cmms-intake
 
-Purpose: run the controlled intake workflow with extraction, contract validation, environment validation, advisory drafts, safety review, and optional CMMS handoff readiness.
+Purpose: run the controlled intake workflow with extraction, contract validation, environment validation, advisory drafts, orchestration planning, and optional CMMS handoff readiness.
+
+Workflow mode:
+
+- Omit `workflow_mode` to use the selected environment default. New and demo environments default to `fast`.
+- Use `"workflow_mode": "fast"` for one-call extraction plus deterministic post-processing.
+- Use `"workflow_mode": "full"` for classifier, extractor, code-normalizer, draft-generator, and safety-reviewer model calls.
+
+Fast mode includes a short-lived canonical extraction cache. Similar fast-mode test requests can return `fast_cache.status: "hit"` when normalized text and key entities match. Full mode is not cached.
 
 Auth: `x-api-key: $LLM_API_KEY`
 
@@ -136,6 +144,7 @@ Auth: `x-api-key: $LLM_API_KEY`
   "text": "The air conditioner in ARC room 205 is making loud noise.",
   "environment_code": "DEFAULT",
   "source": "text",
+  "workflow_mode": "fast",
   "valid_buildings": ["ARC", "MAIN"],
   "valid_priorities": ["low", "normal", "urgent"]
 }
@@ -146,10 +155,23 @@ Response shape:
 ```json
 {
   "endpoint": "cmms-intake",
+  "workflow_mode": "fast",
+  "fast_cache": {
+    "enabled": true,
+    "status": "miss",
+    "match": "canonical",
+    "ttl_seconds": 600
+  },
   "environment_code": "DEFAULT",
   "contract": { "valid": true },
   "result": {},
   "ai_validation": { "valid": true },
+  "asset_context": {},
+  "assignment_context": {},
+  "inventory_context": {},
+  "procurement_request": {},
+  "orchestration_summary": {},
+  "action_plan": {},
   "validation": {
     "can_create_work_order": true,
     "needs_human_review": false,
@@ -353,7 +375,7 @@ curl "$API_BASE_URL/api/environments" \
 curl -X POST "$API_BASE_URL/api/admin/environments" \
   -H "Cookie: $ADMIN_COOKIE" \
   -H "Content-Type: application/json" \
-  -d '{"environment_code":"DEMO","name":"Demo Environment","enabled":true}'
+  -d '{"environment_code":"DEMO","name":"Demo Environment","enabled":true,"default_workflow_mode":"fast"}'
 ```
 
 ### PATCH /api/admin/environments/{environment_code}
@@ -362,8 +384,10 @@ curl -X POST "$API_BASE_URL/api/admin/environments" \
 curl -X PATCH "$API_BASE_URL/api/admin/environments/$ENVIRONMENT_CODE" \
   -H "Cookie: $ADMIN_COOKIE" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Default Environment","enabled":true}'
+  -d '{"name":"Default Environment","enabled":true,"default_workflow_mode":"full"}'
 ```
+
+`default_workflow_mode` accepts `fast` or `full`. The operator UI exposes this as the Environment page's `Default workflow` switch. Orchestration and Test Console workflow selectors follow the selected environment default but can still be changed per request.
 
 ### GET /api/admin/environments/{environment_code}/codes
 
@@ -635,6 +659,8 @@ curl -X PUT "$API_BASE_URL/api/admin/environments/$ENVIRONMENT_CODE/cmms-connect
   -H "Content-Type: application/json" \
   -d '{"enabled":true,"auto_push_enabled":false,"endpoint_url":"https://cmms.example.invalid/api/work-orders","auth_type":"bearer","secret_value":"replace-with-secret","timeout_seconds":5,"http_method":"POST","success_status_codes":"200,201,202","dry_run_enabled":true,"require_metadata_review":true,"static_headers":{},"payload_root_key":null}'
 ```
+
+Fast mode can produce dry-run plans, but it is not a live CMMS write-back shortcut. If a connector is configured for live push (`dry_run_enabled:false`), fast-mode requests are blocked with `full_review_required_for_live_push`; use full mode and pass the normal deterministic gates before live push.
 
 ### POST /api/admin/environments/{environment_code}/cmms-connector/test
 

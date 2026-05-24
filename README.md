@@ -22,6 +22,9 @@ This is not just a prompt demo. The value is the control layer around the model.
 | Free token access | A safe demo token model with scopes, quotas, expiry, revocation, and audit metadata. |
 | CMMS environment validation | Code lists and rules that keep extracted fields aligned with each site or client setup. |
 | Output contracts | Schema checks before business validation runs. |
+| Fast operator workflow | `cmms-intake` can default to a one-call fast path for local testing, while full mode still runs the classifier, code normalizer, draft generator, and safety reviewer. |
+| Controlled orchestration | Asset, assignment, inventory, procurement, action-plan, and CMMS dry-run summaries are composed deterministically around the model result. |
+| Canonical fast cache | Similar fast-mode test requests can reuse a short-lived canonical extraction cache when key entities stay the same. |
 | Voice intake | A future path where customers or technicians speak a request and receive a validated work-order draft. |
 | Screenshot intake | A future path where uploaded screenshots, photos, or UI captures become structured maintenance drafts. |
 | Multi-agent roadmap | Specialist agents for intake, asset context, priority, safety, parts, scheduling, and analytics. |
@@ -39,6 +42,8 @@ The API is built around a simple rule:
 > The model may suggest. The API must validate. The CMMS write must remain controlled.
 
 The browser or external caller does not receive model provider secrets. Requests pass through a gateway that checks token scope, tenant or environment access, quota, output contract, validation rules, and logging policy before any result is returned.
+
+The current local operator console also supports a default fast workflow for demos and test-console iteration. Fast mode uses one extraction call plus deterministic post-processing. Full mode remains available per request or per environment when operators need the slower reviewer and drafting agents. Repeated or similarly worded fast-mode requests can hit a short-lived canonical cache; entity changes such as `AHU-3` to `AHU-4` intentionally miss the cache.
 
 ---
 
@@ -109,6 +114,8 @@ Example API result:
 ```
 
 The returned object is a draft. It is not an automatic work order. A dispatcher, technician, or supervisor can review the result before writing to the live CMMS.
+
+For local orchestration demos, the `DEFAULT` environment can be loaded with sample buildings, rooms, assets, technician roster entries, inventory parts, and a fake dry-run CMMS connector. The response includes planning context such as `asset_context`, `assignment_context`, `inventory_context`, `procurement_request`, `action_plan`, and `orchestration_summary`.
 
 ---
 

@@ -90,7 +90,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"The air conditioner in ARC room 205 is making loud noise.\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"text\"\n}"
+              "raw": "{\n  \"text\": \"The air conditioner in ARC room 205 is making loud noise.\",\n  \"environment_code\": \"{{environment_code}}\",\n  \"source\": \"text\",\n  \"workflow_mode\": \"fast\"\n}"
             },
             "url": "{{base_url}}/api/ai/cmms-intake"
           }
