@@ -23,7 +23,10 @@ def seed_default_environment() -> None:
         return
     timestamp = now_text()
     db_execute(
-        "INSERT INTO environments (environment_code, name, enabled, created_at, updated_at) VALUES (?, ?, 1, ?, ?)",
+        """
+        INSERT INTO environments (environment_code, name, enabled, default_workflow_mode, created_at, updated_at)
+        VALUES (?, ?, 1, 'fast', ?, ?)
+        """,
         ("DEFAULT", "Default local test", timestamp, timestamp),
     )
     defaults = {
@@ -208,16 +211,36 @@ def list_environments() -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def normalize_workflow_mode(value: Any) -> str:
+    return "full" if str(value or "").strip().lower() == "full" else "fast"
+
+
+def default_workflow_mode(environment_code: str | None) -> str:
+    env_code = str(environment_code or "").strip().upper()
+    if not env_code:
+        return "fast"
+    row = db_fetchone(
+        "SELECT default_workflow_mode FROM environments WHERE environment_code = ?",
+        (env_code,),
+    )
+    return normalize_workflow_mode(row["default_workflow_mode"] if row else None)
+
+
 def create_environment(payload: Any) -> dict[str, Any]:
     timestamp = now_text()
     environment_code = payload.environment_code.upper()
+    workflow_mode = normalize_workflow_mode(getattr(payload, "default_workflow_mode", None))
     db_execute(
         """
-        INSERT INTO environments (environment_code, name, enabled, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(environment_code) DO UPDATE SET name = excluded.name, enabled = excluded.enabled, updated_at = excluded.updated_at
+        INSERT INTO environments (environment_code, name, enabled, default_workflow_mode, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(environment_code) DO UPDATE SET
+            name = excluded.name,
+            enabled = excluded.enabled,
+            default_workflow_mode = excluded.default_workflow_mode,
+            updated_at = excluded.updated_at
         """,
-        (environment_code, payload.name, 1 if payload.enabled else 0, timestamp, timestamp),
+        (environment_code, payload.name, 1 if payload.enabled else 0, workflow_mode, timestamp, timestamp),
     )
     ensure_validation_rules(environment_code)
     return {"status": "ok", "environment_code": environment_code}
@@ -229,10 +252,13 @@ def patch_environment(environment_code: str, payload: Any) -> dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="Environment not found")
     db_execute(
-        "UPDATE environments SET name = ?, enabled = ?, updated_at = ? WHERE environment_code = ?",
+        "UPDATE environments SET name = ?, enabled = ?, default_workflow_mode = ?, updated_at = ? WHERE environment_code = ?",
         (
             payload.name if payload.name is not None else row["name"],
             1 if (payload.enabled if payload.enabled is not None else bool(row["enabled"])) else 0,
+            normalize_workflow_mode(payload.default_workflow_mode)
+            if getattr(payload, "default_workflow_mode", None) is not None
+            else normalize_workflow_mode(row["default_workflow_mode"]),
             now_text(),
             environment_code,
         ),

@@ -790,7 +790,18 @@ PORTAL_HTML = r"""<!doctype html>
     }
     function envOptions() {
       const selectedEnv = state.envs.some(e => e.environment_code === "DEFAULT") ? "DEFAULT" : state.envs[0]?.environment_code;
-      return state.envs.map(e => `<option value="${e.environment_code}" ${e.environment_code === selectedEnv ? "selected" : ""}>${e.environment_code} - ${e.name}</option>`).join("");
+      return state.envs.map(e => `<option value="${e.environment_code}" data-workflow-mode="${workflowModeForEnvironment(e)}" ${e.environment_code === selectedEnv ? "selected" : ""}>${e.environment_code} - ${e.name}</option>`).join("");
+    }
+    function workflowModeForEnvironment(env) {
+      return env?.default_workflow_mode === "full" ? "full" : "fast";
+    }
+    function selectedEnvironmentWorkflowMode(envSelectId) {
+      const option = $(envSelectId)?.selectedOptions?.[0];
+      return option?.dataset?.workflowMode === "full" ? "full" : "fast";
+    }
+    function syncWorkflowModeFromEnvironment(envSelectId, workflowSelectId) {
+      const workflow = $(workflowSelectId);
+      if (workflow) workflow.value = selectedEnvironmentWorkflowMode(envSelectId);
     }
     function show(id) {
       state.page = id; renderNav();
@@ -818,7 +829,7 @@ PORTAL_HTML = r"""<!doctype html>
       pageShell("Orchestration", `<div class="grid">
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Instruction</div><div class="playground-subtitle">cmms-intake orchestration_summary</div></div><span class="pill">dry-run</span></div><div class="card-body stack">
           <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="oKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
-          <label>Environment</label><select id="oEnv">${envOptions()}</select>
+          <div class="compact-field-row compact-field-row-two"><div><label>Environment</label><select id="oEnv" onchange="syncWorkflowModeFromEnvironment('oEnv', 'oWorkflowMode')">${envOptions()}</select></div><div><label>Workflow</label><select id="oWorkflowMode"><option value="fast" selected>Fast</option><option value="full">Full</option></select></div></div>
           <label>Request</label><textarea id="oText" class="compact-textarea orchestration-textarea">Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.</textarea>
           <div class="compact-actions"><button id="oRunBtn" onclick="runOrchestration()">Run Orchestration</button><button class="secondary" onclick="setOrchestrationExample()">Reset Example</button></div>
         </div></div>
@@ -833,6 +844,7 @@ PORTAL_HTML = r"""<!doctype html>
           </div>
         </div>
       </div>`, "", "Focused view for one natural-language instruction and its deterministic multi-action plan.");
+      syncWorkflowModeFromEnvironment('oEnv', 'oWorkflowMode');
     }
 
     function setOrchestrationExample() {
@@ -844,7 +856,8 @@ PORTAL_HTML = r"""<!doctype html>
       rememberApiKey(key);
       const payload = {
         text: $("oText").value,
-        environment_code: $("oEnv").value
+        environment_code: $("oEnv").value,
+        workflow_mode: $("oWorkflowMode").value
       };
       if ($("oStatus")) { $("oStatus").textContent = "Running"; $("oStatus").className = "pill warning"; }
       try {
@@ -968,7 +981,8 @@ PORTAL_HTML = r"""<!doctype html>
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Run console</div><div class="playground-subtitle">Text and voice.</div></div><span class="pill">API</span></div><div class="card-body stack">
           <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
           <div class="compact-field-row compact-field-row-two"><div><label>Mode</label><div class="select-wrap"><select id="tEndpoint" class="cmms-select" onchange="renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select></div></div>
-          <div><label>Environment</label><div class="select-wrap"><select id="tEnv" class="cmms-select">${envOptions()}</select></div></div></div>
+          <div><label>Environment</label><div class="select-wrap"><select id="tEnv" class="cmms-select" onchange="syncWorkflowModeFromEnvironment('tEnv', 'tWorkflowMode')">${envOptions()}</select></div></div></div>
+          <div><label>Workflow</label><div class="select-wrap"><select id="tWorkflowMode" class="cmms-select"><option value="fast" selected>Fast</option><option value="full">Full</option></select></div></div>
           <div id="testModeHelp" class="notice"></div>
           <div id="testInputPanel"></div>
         </div></div>
@@ -986,6 +1000,7 @@ PORTAL_HTML = r"""<!doctype html>
           </div>
         </div>
       </div>`, "", "Run advisory AI endpoints with the minimum controls visible first.");
+      syncWorkflowModeFromEnvironment('tEnv', 'tWorkflowMode');
       renderTestInputPanel();
       renderTestModeHelp();
     }
@@ -1273,6 +1288,7 @@ PORTAL_HTML = r"""<!doctype html>
         return;
       }
       const body = { text, environment_code: $("tEnv").value };
+      if (ep === "cmms-intake") body.workflow_mode = $("tWorkflowMode").value;
       if (source !== "text") body.source = source;
       try {
         setRunLoading(true);
@@ -2034,6 +2050,7 @@ PORTAL_HTML = r"""<!doctype html>
       </div>
       <div class="command-bar">
         <span class="muted">Environment</span><select id="envPick" onchange="state.selectedEnv=this.value; environments()">${state.envs.map(e=>`<option value="${e.environment_code}" ${e.environment_code===state.selectedEnv?"selected":""}>${e.environment_code} - ${e.name}</option>`).join("")}</select>
+        <span class="muted">Default workflow</span><select id="envDefaultWorkflowMode" onchange="patchEnvWorkflowMode(this.value)"><option value="fast" ${workflowModeForEnvironment(env) === "fast" ? "selected" : ""}>Fast</option><option value="full" ${workflowModeForEnvironment(env) === "full" ? "selected" : ""}>Full</option></select>
         <button class="secondary" onclick="showCreateEnv()">Create environment</button>
         <button class="secondary" onclick="seedDemoEnvironment()">Load demo setup</button>
         <button class="secondary" onclick="environments()">Refresh</button>
@@ -2049,6 +2066,12 @@ PORTAL_HTML = r"""<!doctype html>
     async function createEnv() {
       await api("/api/admin/environments", { method: "POST", body: JSON.stringify({ environment_code: $("envCode").value, name: $("envName").value, enabled: true }) });
       await refreshBase(); environments();
+    }
+
+    async function patchEnvWorkflowMode(value) {
+      await api(`/api/admin/environments/${state.selectedEnv}`, { method: "PATCH", body: JSON.stringify({ default_workflow_mode: value }) });
+      await refreshBase();
+      environments();
     }
 
     function showCreateEnv() {

@@ -336,6 +336,8 @@ def cmms_push_gate(connector: dict[str, Any] | None, context: dict[str, Any], pa
         reasons.append("human_review_required")
     if context.get("review_passed") is not True:
         reasons.append("review_not_passed")
+    if context.get("fast_mode") and connector and not connector.get("dry_run_enabled"):
+        reasons.append("full_review_required_for_live_push")
     if connector.get("require_metadata_review") and not context.get("metadata_reviewed"):
         reasons.append("metadata_review_required")
     if context.get("handoff_status") != "ready":

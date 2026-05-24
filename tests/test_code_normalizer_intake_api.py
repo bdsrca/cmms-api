@@ -17,6 +17,7 @@ class CodeNormalizerIntakeApiTests(unittest.TestCase):
         return {
             "text": "The leak in ARC room 205 is urgent.",
             "environment_code": "DEFAULT",
+            "workflow_mode": "full",
         }
 
     def fake_ollama(self, normalizer_priority: str = "URGENT", confidence: float = 0.91):

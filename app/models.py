@@ -1,6 +1,6 @@
 """Pydantic request and response models used by controlled AI routes."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +28,7 @@ class ExtractFieldsRequest(BaseModel):
     valid_buildings: list[str] | None = None
     valid_priorities: list[str] | None = None
     source: str | None = None
+    workflow_mode: Literal["full", "fast"] | None = None
 
 
 class EmailIntakeRequest(BaseModel):
@@ -73,6 +74,8 @@ class IntakeDrafts(BaseModel):
 class IntakeResponse(BaseModel):
     run_id: str | None = None
     endpoint: str | None = None
+    workflow_mode: str | None = None
+    fast_cache: dict[str, Any] | None = None
     environment_code: str | None = None
     trace: dict[str, Any] | None = None
     contract: dict[str, Any] | None = None

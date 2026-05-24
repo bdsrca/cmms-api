@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import db
-from app.security import PortalUser, current_admin
+from app.security import PortalUser, current_admin, current_user
 
 
 class DemoEnvironmentSetupTests(unittest.TestCase):
@@ -89,6 +89,40 @@ class DemoEnvironmentSetupTests(unittest.TestCase):
         self.assertGreaterEqual(body["counts"]["technician_roster"], 5)
         self.assertTrue(body["connector"]["dry_run_enabled"])
         self.assertTrue(body["connector"]["auto_push_enabled"])
+
+    def test_environment_default_workflow_mode_can_be_set_and_listed(self) -> None:
+        from app.environment_routes import router
+
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[current_admin] = lambda: PortalUser(user_id=1, username="admin", role="admin")
+        app.dependency_overrides[current_user] = lambda: PortalUser(user_id=1, username="admin", role="admin")
+        client = TestClient(app)
+
+        created = client.post(
+            "/api/admin/environments",
+            json={
+                "environment_code": "FULLTEST",
+                "name": "Full mode test",
+                "enabled": True,
+                "default_workflow_mode": "full",
+            },
+        )
+        listed = client.get("/api/environments")
+
+        self.assertEqual(created.status_code, 200, created.text)
+        env = next(row for row in listed.json() if row["environment_code"] == "FULLTEST")
+        self.assertEqual(env["default_workflow_mode"], "full")
+
+        patched = client.patch(
+            "/api/admin/environments/FULLTEST",
+            json={"default_workflow_mode": "fast"},
+        )
+        listed_again = client.get("/api/environments")
+
+        self.assertEqual(patched.status_code, 200, patched.text)
+        env = next(row for row in listed_again.json() if row["environment_code"] == "FULLTEST")
+        self.assertEqual(env["default_workflow_mode"], "fast")
 
     def test_environment_ui_exposes_demo_setup_action(self) -> None:
         source = Path("app/ui.py").read_text(encoding="utf-8")

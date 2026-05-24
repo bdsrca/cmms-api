@@ -1,6 +1,11 @@
 """Controlled CMMS AI endpoint orchestration and Ollama call helpers."""
 
+import hashlib
 import json
+import re
+import threading
+import time
+from copy import deepcopy
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -20,7 +25,7 @@ from .code_normalizer import (
 from .cmms_connectors import auto_push_cmms_payload
 from .config import ADVISORY_WARNING, ALLOWED_REQUEST_TYPES, MODEL_NAME, OLLAMA_CHAT_URL
 from .db import db_execute
-from .environments import get_environment_values
+from .environments import default_workflow_mode, get_environment_values
 from .intake_handoff import build_canonical_cmms_payload_preview, build_environment_handoff_preview
 from .intake_metadata import build_intake_metadata, extract_metadata_from_text, unreviewed_metadata_review
 from .intake_metadata_reviews import save_extracted_metadata_review
@@ -41,6 +46,146 @@ from .workflow_trace import (
 
 OllamaCaller = Callable[..., Awaitable[str]]
 
+FAST_EXTRACTION_CACHE_TTL_SECONDS = 10 * 60
+FAST_EXTRACTION_CACHE_MAX_ENTRIES = 128
+FAST_EXTRACTION_CACHE_VERSION = "canonical_tokens_v1"
+_FAST_EXTRACTION_CACHE: dict[str, dict[str, Any]] = {}
+_FAST_EXTRACTION_CACHE_LOCK = threading.Lock()
+
+_CANONICAL_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "at",
+    "be",
+    "can",
+    "could",
+    "for",
+    "i",
+    "in",
+    "is",
+    "it",
+    "kindly",
+    "of",
+    "on",
+    "please",
+    "room",
+    "that",
+    "the",
+    "this",
+    "to",
+    "we",
+    "with",
+    "would",
+    "you",
+}
+_CANONICAL_SYNONYMS = {
+    "ticket": "workorder",
+    "wo": "workorder",
+}
+
+
+def clear_fast_extraction_cache() -> None:
+    with _FAST_EXTRACTION_CACHE_LOCK:
+        _FAST_EXTRACTION_CACHE.clear()
+
+
+def canonicalize_fast_cache_text(text: str) -> str:
+    normalized = str(text or "").casefold()
+    normalized = normalized.replace("&", " and ")
+    normalized = re.sub(r"\bw\s*/\s*o\b", " workorder ", normalized)
+    normalized = re.sub(r"\bwork\s+order\b", " workorder ", normalized)
+    normalized = re.sub(r"\bhigh\s+priority\b", " urgent ", normalized)
+    normalized = re.sub(r"\bair\s+handler\s+unit\s*(\d+)\b", r" ahu\1 ", normalized)
+    normalized = re.sub(r"\bair\s+handler\s*(\d+)\b", r" ahu\1 ", normalized)
+    normalized = re.sub(r"\b([a-z]+)\s*[-#/]\s*(\d+)\b", r"\1\2", normalized)
+    normalized = re.sub(
+        r"\b(ahu|mech|room|fcu|pump|panel|zone|tech)\s+(\d+)\b",
+        r"\1\2",
+        normalized,
+    )
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    tokens = []
+    for token in normalized.split():
+        token = _CANONICAL_SYNONYMS.get(token, token)
+        if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+            token = token[:-1]
+        if token and token not in _CANONICAL_STOPWORDS:
+            tokens.append(token)
+    return " ".join(sorted(tokens))
+
+
+def fast_extraction_cache_key(
+    *,
+    text: str,
+    environment_code: str | None,
+    prompt_meta: dict[str, Any],
+    valid_buildings: list[str],
+    valid_priorities: list[str],
+) -> tuple[str, str]:
+    canonical_text = canonicalize_fast_cache_text(text)
+    key_payload = {
+        "version": FAST_EXTRACTION_CACHE_VERSION,
+        "environment_code": str(environment_code or "").upper(),
+        "prompt_id": prompt_meta.get("prompt_id"),
+        "prompt_version": prompt_meta.get("prompt_version"),
+        "model": prompt_meta.get("model"),
+        "temperature": prompt_meta.get("temperature"),
+        "valid_buildings": sorted(valid_buildings),
+        "valid_priorities": sorted(valid_priorities),
+        "canonical_text": canonical_text,
+    }
+    key_hash = hashlib.sha256(json.dumps(key_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    return key_hash, canonical_text
+
+
+def _prune_fast_extraction_cache(now: float) -> None:
+    expired = [key for key, entry in _FAST_EXTRACTION_CACHE.items() if entry["expires_at"] <= now]
+    for key in expired:
+        _FAST_EXTRACTION_CACHE.pop(key, None)
+    if len(_FAST_EXTRACTION_CACHE) <= FAST_EXTRACTION_CACHE_MAX_ENTRIES:
+        return
+    ordered = sorted(_FAST_EXTRACTION_CACHE.items(), key=lambda item: item[1].get("last_used_at", 0))
+    for key, _entry in ordered[: len(_FAST_EXTRACTION_CACHE) - FAST_EXTRACTION_CACHE_MAX_ENTRIES]:
+        _FAST_EXTRACTION_CACHE.pop(key, None)
+
+
+def read_fast_extraction_cache(key_hash: str) -> dict[str, Any] | None:
+    now = time.time()
+    with _FAST_EXTRACTION_CACHE_LOCK:
+        _prune_fast_extraction_cache(now)
+        entry = _FAST_EXTRACTION_CACHE.get(key_hash)
+        if not entry:
+            return None
+        entry["last_used_at"] = now
+        entry["hit_count"] = int(entry.get("hit_count") or 0) + 1
+        return deepcopy(entry["data"])
+
+
+def write_fast_extraction_cache(key_hash: str, data: dict[str, Any]) -> None:
+    now = time.time()
+    with _FAST_EXTRACTION_CACHE_LOCK:
+        _prune_fast_extraction_cache(now)
+        _FAST_EXTRACTION_CACHE[key_hash] = {
+            "data": deepcopy(data),
+            "created_at": now,
+            "last_used_at": now,
+            "expires_at": now + FAST_EXTRACTION_CACHE_TTL_SECONDS,
+            "hit_count": 0,
+        }
+
+
+def fast_cache_block(status: str, key_hash: str) -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "status": status,
+        "match": "canonical",
+        "key_hash": key_hash[:16],
+        "ttl_seconds": FAST_EXTRACTION_CACHE_TTL_SECONDS,
+        "canonicalizer": FAST_EXTRACTION_CACHE_VERSION,
+    }
+
 
 def build_cmms_intake_push_result(
     *,
@@ -52,6 +197,7 @@ def build_cmms_intake_push_result(
     validation: dict[str, Any],
     review: dict[str, Any],
     metadata_review: dict[str, Any] | None = None,
+    workflow_mode: str = "full",
     sender: Any = None,
 ) -> dict[str, Any]:
     env_code = str(environment_code or "").strip().upper()
@@ -65,11 +211,62 @@ def build_cmms_intake_push_result(
         "review_passed": review.get("status") == "pass",
         "metadata_reviewed": bool((metadata_review or {}).get("reviewed")),
         "handoff_status": (environment_preview or {}).get("status"),
+        "fast_mode": workflow_mode == "fast",
         "idempotency_key": create_work_order_idempotency_key(run_id),
     }
     result = auto_push_cmms_payload(env_code, canonical_preview, push_context, sender=sender)
     result["handoff_status"] = push_context["handoff_status"]
     return result
+
+
+def workflow_mode_for_payload(payload: Any) -> str:
+    explicit_mode = getattr(payload, "workflow_mode", None)
+    if explicit_mode in {"fast", "full"}:
+        return str(explicit_mode)
+    return default_workflow_mode(getattr(payload, "environment_code", None))
+
+
+def fast_mode_reviewer_block() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "status": "pass",
+        "human_review_recommended": False,
+        "risk_flags": [],
+        "notes": ["LLM safety reviewer skipped in fast mode. Use full mode before live CMMS write-back."],
+        "source": "fast_mode_deterministic_review",
+        "message": "Fast mode skipped the LLM safety reviewer; dry-run planning can continue.",
+    }
+
+
+def deterministic_fast_drafts(
+    *,
+    fields: dict[str, Any],
+    result_payload: dict[str, Any],
+    assignment_context: dict[str, Any],
+    inventory_context: dict[str, Any],
+    procurement_request: dict[str, Any],
+) -> dict[str, str]:
+    summary = str(fields.get("summary") or result_payload.get("summary") or "CMMS intake request")
+    priority = str(result_payload.get("priority") or fields.get("priority") or "NORMAL")
+    asset_code = (result_payload.get("work_order_plan") or {}).get("asset_code")
+    assignment = assignment_context.get("assignment") if isinstance(assignment_context, dict) else {}
+    technician = (assignment_context.get("technician") or {}).get("label") if isinstance(assignment_context, dict) else None
+    assign_to = technician or (assignment or {}).get("assign_to")
+    inventory_status = inventory_context.get("status") if isinstance(inventory_context, dict) else None
+    procurement_status = procurement_request.get("status") if isinstance(procurement_request, dict) else None
+
+    subject = f" for {asset_code}" if asset_code else ""
+    assignment_text = f" Assignment target: {assign_to}." if assign_to else ""
+    inventory_text = f" Inventory status: {inventory_status}." if inventory_status else ""
+    procurement_text = f" Procurement status: {procurement_status}." if procurement_status else ""
+    return {
+        "draft_wo_description": f"{summary} Priority: {priority}.{assignment_text}",
+        "internal_note": (
+            f"Fast mode deterministic draft{subject}. {ADVISORY_WARNING}"
+            f"{inventory_text}{procurement_text} Full safety review is required before live CMMS write-back."
+        ),
+        "client_reply": f"Your request has been captured for review.{assignment_text}{procurement_text}",
+    }
 
 
 def normalize_allowed_values(values: list[str]) -> list[str]:
@@ -407,6 +604,7 @@ async def cmms_intake(
 ) -> dict[str, Any]:
     env_hint = payload.environment_code.upper() if payload.environment_code else None
     intake_source = source if source is not None else payload.source
+    workflow_mode = workflow_mode_for_payload(payload)
     run_id = start_workflow_run(
         "cmms-intake",
         environment_code=env_hint,
@@ -433,30 +631,64 @@ async def cmms_intake(
             20,
             model=MODEL_NAME,
             prompt_version="pending",
-            input_summary=f"text_length={len(payload.text)} buildings={len(valid_buildings)} priorities={len(valid_priorities)}",
+            input_summary=f"text_length={len(payload.text)} buildings={len(valid_buildings)} priorities={len(valid_priorities)} mode={workflow_mode}",
         )
-        intake_messages, prompt_meta = intake_prompt_messages(
-            {
-                "text": payload.text,
-                "allowed_request_types": sorted(ALLOWED_REQUEST_TYPES),
-                "valid_buildings": valid_buildings,
-                "valid_priorities": valid_priorities,
-            },
-            prompt_id,
-        )
-        db_execute(
-            "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
-            (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
-        )
-        classifier_data = parse_json_response(await call_ollama_func(intake_messages["classifier"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
-        extractor_data = parse_json_response(await call_ollama_func(intake_messages["field_extractor"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
-        request_type, confidence, fields, validation, extraction_context = validate_intake(
-            classifier_data.get("request_type"),
-            classifier_data.get("confidence"),
-            extractor_data,
-            valid_buildings,
-            valid_priorities,
-        )
+        prompt_context = {
+            "text": payload.text,
+            "allowed_request_types": sorted(ALLOWED_REQUEST_TYPES),
+            "valid_buildings": valid_buildings,
+            "valid_priorities": valid_priorities,
+        }
+        intake_messages: dict[str, list[dict[str, str]]] | None = None
+        fast_cache = {"enabled": False, "status": "disabled"}
+        model_call_count = 2
+        if workflow_mode == "fast":
+            extraction_messages, prompt_meta = prompt_messages("extract-work-order-fields", prompt_context)
+            db_execute(
+                "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
+                (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
+            )
+            cache_key, _canonical_text = fast_extraction_cache_key(
+                text=payload.text,
+                environment_code=env_code,
+                prompt_meta=prompt_meta,
+                valid_buildings=valid_buildings,
+                valid_priorities=valid_priorities,
+            )
+            cached_data = read_fast_extraction_cache(cache_key)
+            if cached_data is not None:
+                extracted_data = cached_data
+                model_call_count = 0
+                fast_cache = fast_cache_block("hit", cache_key)
+            else:
+                extracted_data = parse_json_response(
+                    await call_ollama_func(extraction_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+                )
+                write_fast_extraction_cache(cache_key, extracted_data)
+                model_call_count = 1
+                fast_cache = fast_cache_block("miss", cache_key)
+            request_type, confidence, fields, validation, extraction_context = validate_intake(
+                extracted_data.get("request_type"),
+                extracted_data.get("confidence"),
+                extracted_data,
+                valid_buildings,
+                valid_priorities,
+            )
+        else:
+            intake_messages, prompt_meta = intake_prompt_messages(prompt_context, prompt_id)
+            db_execute(
+                "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
+                (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
+            )
+            classifier_data = parse_json_response(await call_ollama_func(intake_messages["classifier"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
+            extractor_data = parse_json_response(await call_ollama_func(intake_messages["field_extractor"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
+            request_type, confidence, fields, validation, extraction_context = validate_intake(
+                classifier_data.get("request_type"),
+                classifier_data.get("confidence"),
+                extractor_data,
+                valid_buildings,
+                valid_priorities,
+            )
         metadata = build_intake_metadata(
             source=intake_source or "text",
             fields=fields,
@@ -475,10 +707,11 @@ async def cmms_intake(
             output_json={
                 "request_type": request_type,
                 "confidence": confidence,
-                "model_call_count": 2,
+                "model_call_count": model_call_count,
                 "prompt_id": prompt_meta["prompt_id"],
                 "prompt_version": prompt_meta["prompt_version"],
                 "temperature": prompt_meta["temperature"],
+                "cache": fast_cache,
                 "fields": fields,
                 "missing_fields": validation["missing_fields"],
                 "invalid_code_candidates": extraction_context["invalid_code_candidates"],
@@ -660,7 +893,12 @@ async def cmms_intake(
             35,
             input_summary=f"contract_valid={contract_validation['valid']} environment={env_code or 'none'}",
         )
-        if env_code and contract_validation["valid"]:
+        should_run_normalizer = (
+            env_code
+            and contract_validation["valid"]
+            and (workflow_mode == "full" or bool(extraction_context.get("invalid_code_candidates")))
+        )
+        if should_run_normalizer:
             try:
                 code_values = load_code_values_for_normalizer(env_code)
                 normalizer_context = build_code_normalizer_context(
@@ -735,7 +973,10 @@ async def cmms_intake(
                     output_json={"status": "failed", "message": str(exc)[:200]},
                 )
         else:
-            message = "Skipped because output contract validation failed." if env_code else "Skipped because no environment_code was supplied."
+            if workflow_mode == "fast" and not extraction_context.get("invalid_code_candidates"):
+                message = "Skipped in fast mode because extracted codes are already valid."
+            else:
+                message = "Skipped because output contract validation failed." if env_code else "Skipped because no environment_code was supplied."
             code_normalization = skipped_code_normalization_block(message)
             finish_workflow_step(
                 current_step,
@@ -788,44 +1029,55 @@ async def cmms_intake(
             run_id,
             "draft_generation",
             43,
-            model=prompt_meta["model"],
-            prompt_version=f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}",
+            model=None if workflow_mode == "fast" else prompt_meta["model"],
+            prompt_version=None if workflow_mode == "fast" else f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}",
             input_summary=f"validation_valid={ai_validation.get('valid')}",
         )
-        draft_context = {
-            "text": payload.text,
-            "request_type": request_type,
-            "fields": fields,
-            "validation": validation,
-            "contract": contract_block,
-            "ai_validation": ai_validation,
-            "code_normalization": code_normalization,
-            "asset_context": asset_context,
-            "work_order_plan": work_order_plan,
-            "assignment_context": assignment_context,
-            "inventory_context": inventory_context,
-            "procurement_request": procurement_request,
-            "orchestration_summary": orchestration_summary,
-            "action_plan": action_plan,
-            "submission": metadata["submission"],
-            "request": metadata["request"],
-        }
-        draft_messages = [
-            intake_messages["draft_generator"][0],
-            {"role": "user", "content": json.dumps(draft_context)},
-        ]
-        draft_data = parse_json_response(
-            await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
-        )
-        drafts = {
-            "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
-            "internal_note": str(draft_data.get("internal_note") or "Validated intake. Ready for human review or controlled CMMS workflow."),
-            "client_reply": str(draft_data.get("client_reply") or "Thanks, we captured your request."),
-        }
+        if workflow_mode == "fast":
+            drafts = deterministic_fast_drafts(
+                fields=fields,
+                result_payload=contract_validation["normalized_payload"] if contract_validation["valid"] else result_payload,
+                assignment_context=assignment_context,
+                inventory_context=inventory_context,
+                procurement_request=procurement_request,
+            )
+            draft_summary = "Deterministic fast draft generated."
+        else:
+            draft_context = {
+                "text": payload.text,
+                "request_type": request_type,
+                "fields": fields,
+                "validation": validation,
+                "contract": contract_block,
+                "ai_validation": ai_validation,
+                "code_normalization": code_normalization,
+                "asset_context": asset_context,
+                "work_order_plan": work_order_plan,
+                "assignment_context": assignment_context,
+                "inventory_context": inventory_context,
+                "procurement_request": procurement_request,
+                "orchestration_summary": orchestration_summary,
+                "action_plan": action_plan,
+                "submission": metadata["submission"],
+                "request": metadata["request"],
+            }
+            draft_messages = [
+                (intake_messages or {})["draft_generator"][0],
+                {"role": "user", "content": json.dumps(draft_context)},
+            ]
+            draft_data = parse_json_response(
+                await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+            )
+            drafts = {
+                "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
+                "internal_note": str(draft_data.get("internal_note") or "Validated intake. Ready for human review or controlled CMMS workflow."),
+                "client_reply": str(draft_data.get("client_reply") or "Thanks, we captured your request."),
+            }
+            draft_summary = "Draft text generated after validation."
         finish_workflow_step(
             current_step,
             "passed",
-            output_summary="Draft text generated after validation.",
+            output_summary=draft_summary,
             output_json={"draft_fields": sorted(drafts.keys())},
         )
         current_step = None
@@ -836,7 +1088,15 @@ async def cmms_intake(
             45,
             input_summary=f"contract_valid={contract_validation['valid']}",
         )
-        if contract_validation["valid"]:
+        if workflow_mode == "fast":
+            review = fast_mode_reviewer_block()
+            finish_workflow_step(
+                current_step,
+                "skipped",
+                output_summary=review["message"],
+                output_json={"status": review["status"], "enabled": review["enabled"], "source": review["source"]},
+            )
+        elif contract_validation["valid"]:
             review, reviewer_prompt_meta = await run_safety_reviewer_agent(
                 result=contract_validation["normalized_payload"],
                 contract=contract_block,
@@ -887,6 +1147,7 @@ async def cmms_intake(
             validation=validation,
             review=review,
             metadata_review=metadata_review,
+            workflow_mode=workflow_mode,
         )
         action_plan = finalize_action_plan(action_plan, cmms_push)
         orchestration_summary = build_orchestration_summary(
@@ -934,6 +1195,8 @@ async def cmms_intake(
         return {
             "run_id": run_id,
             "endpoint": "cmms-intake",
+            "workflow_mode": workflow_mode,
+            "fast_cache": fast_cache,
             "environment_code": env_code,
             "trace": {"available": True, "run_id": run_id},
             "contract": contract_block,

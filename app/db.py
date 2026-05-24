@@ -88,6 +88,7 @@ SCHEMA_STATEMENTS = [
         environment_code TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
+        default_workflow_mode TEXT NOT NULL DEFAULT 'fast',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )
@@ -460,6 +461,16 @@ INDEX_STATEMENTS = [
 
 
 def ensure_schema_columns(conn: sqlite3.Connection) -> None:
+    environment_columns = {row["name"] for row in conn.execute("PRAGMA table_info(environments)").fetchall()}
+    environment_migrations = {
+        "default_workflow_mode": "ALTER TABLE environments ADD COLUMN default_workflow_mode TEXT NOT NULL DEFAULT 'fast'",
+    }
+    for column, statement in environment_migrations.items():
+        if column not in environment_columns:
+            conn.execute(statement)
+    conn.execute(
+        "UPDATE environments SET default_workflow_mode = 'fast' WHERE default_workflow_mode IS NULL OR default_workflow_mode = ''"
+    )
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(code_values)").fetchall()}
     migrations = {
         "aliases": "ALTER TABLE code_values ADD COLUMN aliases TEXT",

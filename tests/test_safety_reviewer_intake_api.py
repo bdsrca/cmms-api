@@ -68,6 +68,7 @@ class SafetyReviewerIntakeApiTests(unittest.TestCase):
             "text": "The air conditioner in ARC room 205 is noisy.",
             "valid_buildings": ["ARC"],
             "valid_priorities": ["NORMAL"],
+            "workflow_mode": "full",
         }
 
     def fake_ollama(self, reviewer_status: str):

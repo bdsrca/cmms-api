@@ -26,8 +26,8 @@ def ensure_environment(environment_code: str) -> str:
         timestamp = now_text()
         db_execute(
             """
-            INSERT INTO environments (environment_code, name, enabled, created_at, updated_at)
-            VALUES (?, ?, 1, ?, ?)
+            INSERT INTO environments (environment_code, name, enabled, default_workflow_mode, created_at, updated_at)
+            VALUES (?, ?, 1, 'fast', ?, ?)
             """,
             (env_code, f"{env_code} demo environment", timestamp, timestamp),
         )

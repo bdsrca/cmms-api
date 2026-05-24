@@ -69,6 +69,7 @@ class OrchestrationSummaryIntakeApiTests(unittest.TestCase):
                 json={
                     "text": "Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.",
                     "environment_code": "DEFAULT",
+                    "workflow_mode": "full",
                 },
             )
 
@@ -98,6 +99,7 @@ class OrchestrationSummaryIntakeApiTests(unittest.TestCase):
                 json={
                     "text": "Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.",
                     "environment_code": "DEFAULT",
+                    "workflow_mode": "full",
                 },
             )
             trace = client.get(f"/api/admin/workflow-runs/{response.json()['run_id']}")

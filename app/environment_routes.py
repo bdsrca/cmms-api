@@ -1,6 +1,6 @@
 """Environment and code-list route registration."""
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -25,11 +25,13 @@ class EnvironmentRequest(BaseModel):
     environment_code: str = Field(..., min_length=1, max_length=40)
     name: str = Field(..., min_length=1, max_length=120)
     enabled: bool = True
+    default_workflow_mode: Literal["fast", "full"] = "fast"
 
 
 class EnvironmentPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     enabled: bool | None = None
+    default_workflow_mode: Literal["fast", "full"] | None = None
 
 
 class CodeImportRequest(BaseModel):

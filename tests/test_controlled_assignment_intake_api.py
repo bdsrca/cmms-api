@@ -104,6 +104,7 @@ class ControlledAssignmentIntakeApiTests(unittest.TestCase):
                 json={
                     "text": "Create a high priority work order for AHU-3 and assign it to tonight's on-duty technician.",
                     "environment_code": "DEFAULT",
+                    "workflow_mode": "full",
                 },
             )
 
@@ -130,6 +131,7 @@ class ControlledAssignmentIntakeApiTests(unittest.TestCase):
                 json={
                     "text": "Create a high priority work order for AHU-3 and assign it to tonight's on-duty technician.",
                     "environment_code": "DEFAULT",
+                    "workflow_mode": "full",
                 },
             )
             trace = client.get(f"/api/admin/workflow-runs/{response.json()['run_id']}")

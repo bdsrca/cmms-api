@@ -82,7 +82,7 @@ class SafetyReviewerPromptOverrideTests(unittest.IsolatedAsyncioTestCase):
                 "DEFAULT",
                 reviewer_prompt_id=77,
                 call_ollama_func=fake_ollama,
-                request_factory=lambda **kwargs: type("Payload", (), kwargs)(),
+                request_factory=lambda **kwargs: type("Payload", (), {**kwargs, "workflow_mode": "full"})(),
             )
 
         self.assertEqual(data["review"]["status"], "warning")
