@@ -980,9 +980,9 @@ PORTAL_HTML = r"""<!doctype html>
       pageShell("Test Console", `<div class="grid">
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Run console</div><div class="playground-subtitle">Text and voice.</div></div><span class="pill">API</span></div><div class="card-body stack">
           <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="tKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
-          <div class="compact-field-row compact-field-row-two"><div><label>Mode</label><div class="select-wrap"><select id="tEndpoint" class="cmms-select" onchange="renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select></div></div>
+          <div class="compact-field-row compact-field-row-two"><div><label>Mode</label><div class="select-wrap"><select id="tEndpoint" class="cmms-select" onchange="updateTestModeUi(); renderTestModeHelp()"><option value="cmms-intake">CMMS Intake</option><option value="intake/email">Email Intake</option><option value="orchestration-preview">Orchestration Preview</option><option value="cmms-assistant">CMMS Assistant Chat</option><option value="extract-work-order-fields">Extract Fields</option><option value="summarize-work-order">Summarize</option></select></div></div>
           <div><label>Environment</label><div class="select-wrap"><select id="tEnv" class="cmms-select" onchange="syncWorkflowModeFromEnvironment('tEnv', 'tWorkflowMode')">${envOptions()}</select></div></div></div>
-          <div><label>Workflow</label><div class="select-wrap"><select id="tWorkflowMode" class="cmms-select"><option value="fast" selected>Fast</option><option value="full">Full</option></select></div></div>
+          <div id="testWorkflowRow"><label>Workflow</label><div class="select-wrap"><select id="tWorkflowMode" class="cmms-select"><option value="fast" selected>Fast</option><option value="full">Full</option></select></div></div>
           <div id="testModeHelp" class="notice"></div>
           <div id="testInputPanel"></div>
         </div></div>
@@ -990,6 +990,7 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run CMMS Intake to evaluate whether enough validated information exists for a human-controlled workflow.</div></div>
             ${collapsiblePanel("Intake Metadata", `<div id="tMetadata"><span class="muted">Run CMMS Intake to extract metadata.</span></div>`)}
+            ${collapsiblePanel("Code Normalization", `<div id="tCodeNormalization"><span class="muted">Run CMMS Intake to see code normalization suggestions.</span></div>`)}
             ${collapsiblePanel("Safety Review", `<div id="tReview"><span class="muted">Run CMMS Intake to see advisory safety review.</span></div>`)}
             ${collapsiblePanel("Workflow Trace", `<div id="tTrace"><span class="muted">Run CMMS Intake to see trace steps.</span></div>`)}
             <div class="result-grid">
@@ -1002,6 +1003,7 @@ PORTAL_HTML = r"""<!doctype html>
       </div>`, "", "Run advisory AI endpoints with the minimum controls visible first.");
       syncWorkflowModeFromEnvironment('tEnv', 'tWorkflowMode');
       renderTestInputPanel();
+      updateTestModeUi();
       renderTestModeHelp();
     }
     function emailIntake() {
@@ -1022,6 +1024,7 @@ PORTAL_HTML = r"""<!doctype html>
           <div class="run-surface">
             <div id="tReadiness" class="readiness"><strong>Work order readiness</strong><div class="muted">Run Email to evaluate the request.</div></div>
             ${collapsiblePanel("Intake Metadata", `<div id="tMetadata"><span class="muted">Run Email to extract metadata.</span></div>`)}
+            ${collapsiblePanel("Code Normalization", `<div id="tCodeNormalization"><span class="muted">Run Email to see code normalization suggestions.</span></div>`)}
             ${collapsiblePanel("Safety Review", `<div id="tReview"><span class="muted">Run Email to see advisory safety review.</span></div>`)}
             ${collapsiblePanel("Workflow Trace", `<div id="tTrace"><span class="muted">No run yet.</span></div>`)}
             <div class="result-grid">
@@ -1038,7 +1041,14 @@ PORTAL_HTML = r"""<!doctype html>
       const supported = getSpeechRecognitionCtor();
       state.voiceSupported = Boolean(supported);
       $("testInputPanel").innerHTML = `<div class="ai-panel stack">
-          <label>Content</label>
+          <div id="testEmailFields" class="stack hidden">
+            <div class="compact-field-row compact-field-row-two">
+              <div><label>From</label><input id="testEmailFrom" value="operator@example.local" placeholder="requester@example.com"></div>
+              <div><label>To</label><input id="testEmailTo" value="maintenance@example.local" placeholder="maintenance@example.com"></div>
+            </div>
+            <label>Subject</label><input id="testEmailSubject" value="Test Console Email Intake" placeholder="Email subject">
+          </div>
+          <label id="testContentLabel">Content</label>
           <div class="input-with-voice"><textarea id="tText" class="compact-textarea test-console-textarea">The air conditioner in ARC room 205 is making loud noise and the room is too warm. My name is Leon, phone is 1234, email address is bdsrca@gmail.com. I wanted it done by the end of this week.</textarea><button id="voiceStartBtn" class="voice-icon-button secondary" aria-label="Start voice input" title="Start voice input" onclick="startVoiceRecognition()" ${supported ? "" : "disabled"}>🎙</button></div>
           <div class="compact-actions test-console-actions"><button id="runTestBtn" onclick="runTest('text')">Run Text</button><button class="secondary" onclick="clearVoiceTranscript()">Clear</button><button class="secondary" onclick="openSaveCurrentTestCase()">Save as Test Case</button><button class="secondary" onclick="runMatchingTestCase()">Run Matching Test</button></div>
         </div>
@@ -1060,11 +1070,22 @@ PORTAL_HTML = r"""<!doctype html>
           <div id="voiceMessage" class="muted">Speech recognition is handled by the browser. This app does not store audio. Review the transcript before sending.</div>
         </div></details>`;
     }
+    function updateTestModeUi() {
+      const ep = $("tEndpoint")?.value || "cmms-intake";
+      const isEmail = ep === "intake/email";
+      const isOrchestration = ep === "orchestration-preview";
+      if ($("testEmailFields")) $("testEmailFields").classList.toggle("hidden", !isEmail);
+      if ($("testWorkflowRow")) $("testWorkflowRow").classList.toggle("hidden", isEmail || ep === "extract-work-order-fields" || ep === "summarize-work-order" || ep === "cmms-assistant");
+      if ($("testContentLabel")) $("testContentLabel").textContent = isEmail ? "Email body" : isOrchestration ? "Work request" : "Content";
+      if ($("runTestBtn")) $("runTestBtn").textContent = isEmail ? "Run Email Intake" : isOrchestration ? "Run Orchestration Preview" : "Run";
+    }
     async function renderTestModeHelp() {
       if (!$("testModeHelp")) return;
       const ep = $("tEndpoint")?.value || "cmms-intake";
       const copy = {
         "cmms-intake": "Controlled extraction workflow: contract validation, environment validation, readiness, and advisory drafts.",
+        "intake/email": "Email-shaped intake test. The text box is sent as the email body through the existing controlled email intake endpoint.",
+        "orchestration-preview": "Runs CMMS Intake in full workflow mode so orchestration, assignment, inventory, action-plan, and gate details are visible.",
         "cmms-assistant": "Controlled CMMS assistant chat. It can discuss intake, validation, API usage, and drafts, but cannot create work orders or write to CMMS.",
         "extract-work-order-fields": "Field extraction only. Useful for debugging request type, building, room, priority, and missing fields.",
         "summarize-work-order": "One-sentence work request summary. No readiness validation."
@@ -1257,6 +1278,7 @@ PORTAL_HTML = r"""<!doctype html>
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
         renderIntakeMetadata(data);
+        renderCodeNormalization(data.code_normalization);
         renderSafetyReview(data.review);
         renderWorkflowTraceFromResponse(data, "tTrace");
       } catch (e) {
@@ -1287,13 +1309,28 @@ PORTAL_HTML = r"""<!doctype html>
         setConsoleOutput("tOut", { error: message });
         return;
       }
-      const body = { text, environment_code: $("tEnv").value };
-      if (ep === "cmms-intake") body.workflow_mode = $("tWorkflowMode").value;
-      if (source !== "text") body.source = source;
+      let path = `/api/ai/${ep}`;
+      let body = { text, environment_code: $("tEnv").value };
+      if (ep === "intake/email") {
+        path = "/api/ai/intake/email";
+        body = {
+          from_email: $("testEmailFrom").value,
+          to_email: $("testEmailTo").value,
+          subject: $("testEmailSubject").value,
+          body: text,
+          environment_code: $("tEnv").value
+        };
+          } else if (ep === "orchestration-preview") {
+            path = "/api/ai/cmms-intake";
+            body.workflow_mode = "full";
+            body.source = "orchestration_preview";
+          }
+          if (ep === "cmms-intake") body.workflow_mode = $("tWorkflowMode").value;
+          if (source !== "text" && ep !== "intake/email" && ep !== "orchestration-preview") body.source = source;
       try {
         setRunLoading(true);
         rememberApiKey($("tKey").value);
-        const data = await api(`/api/ai/${ep}`, { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(body) });
+        const data = await api(path, { method: "POST", headers: { "x-api-key": state.defaultApiKey }, body: JSON.stringify(body) });
         const sourceLabels = { text: "text", voice_transcript: "voice transcript", email_paste: "email paste" };
         if ($("inputSourceLabel")) $("inputSourceLabel").textContent = `Input source: ${sourceLabels[source] || source}`;
         if ($("runStatus")) $("runStatus").textContent = "Complete";
@@ -1305,6 +1342,7 @@ PORTAL_HTML = r"""<!doctype html>
         renderTestValidation(data.ai_validation);
         renderReadiness(data);
         renderIntakeMetadata(data);
+        renderCodeNormalization(data.code_normalization);
         renderSafetyReview(data.review);
         renderWorkflowTraceFromResponse(data, "tTrace");
         if (source === "voice_transcript") setVoiceStatus("Idle", "Voice transcript sent to the API.");
@@ -1442,6 +1480,24 @@ PORTAL_HTML = r"""<!doctype html>
         <h3>Errors</h3>${issueList(validation.errors)}
         <h3>Warnings</h3>${issueList(validation.warnings)}
         <h3>Normalized</h3><pre style="min-height:100px">${JSON.stringify(validation.normalized || {}, null, 2)}</pre>`;
+    }
+
+    function renderCodeNormalization(block) {
+      if (!$("tCodeNormalization")) return;
+      if (!block) {
+        $("tCodeNormalization").innerHTML = '<span class="muted">No code normalization returned for this endpoint.</span>';
+        return;
+      }
+      const status = block.status || "unknown";
+      const cls = status === "applied" || status === "no_suggestions" ? "ok" : status === "skipped" || status === "rejected" ? "warning" : "danger";
+      const suggestions = block.suggestions || [];
+      const rejected = block.rejected || [];
+      const applied = block.applied || {};
+      $("tCodeNormalization").innerHTML = `<div class="status-line"><span class="pill ${cls}">${escapeHtml(status)}</span><span class="muted">${block.enabled ? "suggestion agent enabled" : "not run"}</span></div>
+        ${block.message ? `<p class="muted">${escapeHtml(block.message)}</p>` : ""}
+        <h3>Applied</h3><pre style="min-height:80px">${JSON.stringify(applied, null, 2)}</pre>
+        <h3>Accepted suggestions</h3>${suggestions.length ? `<table><thead><tr><th>Field</th><th>Input</th><th>Code</th><th>Confidence</th><th>Reason</th></tr></thead><tbody>${suggestions.map(s => `<tr><td>${escapeHtml(s.field || "")}</td><td>${escapeHtml(s.input_value || "")}</td><td>${escapeHtml(s.suggested_code || "")}</td><td>${escapeHtml(s.confidence ?? "")}</td><td>${escapeHtml(s.reason || "")}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">None</p>'}
+        <h3>Rejected suggestions</h3>${rejected.length ? `<table><thead><tr><th>Field</th><th>Code</th><th>Reason</th></tr></thead><tbody>${rejected.map(s => `<tr><td>${escapeHtml(s.field || "")}</td><td>${escapeHtml(s.suggested_code || "")}</td><td>${escapeHtml(s.reason_code || "unknown")}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">None</p>'}`;
     }
 
     function renderSafetyReview(review) {

@@ -12,6 +12,11 @@ from app.security import PortalUser, current_user
 class CodeNormalizerIntakeApiTests(unittest.TestCase):
     def setUp(self) -> None:
         os.environ["LLM_API_KEY"] = "code-normalizer-test-key"
+        self.original_ai_call_ollama = app_main.ai_call_ollama
+
+    def tearDown(self) -> None:
+        app_main.ai_call_ollama = self.original_ai_call_ollama
+        app_main.app.dependency_overrides.pop(current_user, None)
 
     def payload(self) -> dict:
         return {
@@ -20,11 +25,17 @@ class CodeNormalizerIntakeApiTests(unittest.TestCase):
             "workflow_mode": "full",
         }
 
-    def fake_ollama(self, normalizer_priority: str = "URGENT", confidence: float = 0.91):
+    def fake_ollama(
+        self,
+        normalizer_priority: str = "URGENT",
+        confidence: float = 0.91,
+        extra_suggestions: list[dict] | None = None,
+        request_type: str = "Plumbing",
+    ):
         async def fake_call_ollama(messages, timeout=120, temperature=None, model="qwen3:8b"):
             system = messages[0]["content"] if messages else ""
             if "Classify the CMMS request type only" in system:
-                return json.dumps({"request_type": "Plumbing", "confidence": 0.9})
+                return json.dumps({"request_type": request_type, "confidence": 0.9})
             if "Extract CMMS intake fields" in system:
                 return json.dumps(
                     {
@@ -35,17 +46,19 @@ class CodeNormalizerIntakeApiTests(unittest.TestCase):
                     }
                 )
             if "Code Normalization Suggestion Agent" in system:
+                suggestions = [
+                    {
+                        "field": "priority",
+                        "input_value": "urgent phrase",
+                        "suggested_code": normalizer_priority,
+                        "confidence": confidence,
+                        "reason": "Urgent wording.",
+                    }
+                ]
+                suggestions.extend(extra_suggestions or [])
                 return json.dumps(
                     {
-                        "suggestions": [
-                            {
-                                "field": "priority",
-                                "input_value": "urgent phrase",
-                                "suggested_code": normalizer_priority,
-                                "confidence": confidence,
-                                "reason": "Urgent wording.",
-                            }
-                        ]
+                        "suggestions": suggestions
                     }
                 )
             if "Generate advisory CMMS draft text only" in system:
@@ -150,6 +163,48 @@ class CodeNormalizerIntakeApiTests(unittest.TestCase):
         self.assertLess(names.index("output_contract_validation"), names.index("code_normalization_suggestion_agent"))
         self.assertLess(names.index("code_normalization_suggestion_agent"), names.index("environment_validation"))
         self.assertLess(names.index("environment_validation"), names.index("draft_generation"))
+
+    def test_invalid_work_order_type_is_collected_and_normalized(self) -> None:
+        app_main.ai_call_ollama = self.fake_ollama(
+            extra_suggestions=[
+                {
+                    "field": "work_order_type",
+                    "input_value": "Plumbing",
+                    "suggested_code": "PLUMB",
+                    "confidence": 0.92,
+                    "reason": "Configured plumbing code.",
+                }
+            ]
+        )
+        code_values = {
+            "priorities": [{"code": "URGENT", "label": "Urgent", "aliases": ""}],
+            "work_order_types": [{"code": "PLUMB", "label": "Pipe Work", "aliases": ""}],
+            "assign_to": [],
+            "issue_to_employee_number": [],
+            "job_type": [],
+        }
+        validation_result = {
+            "enabled": True,
+            "valid": True,
+            "status": "completed",
+            "errors": [],
+            "warnings": [],
+            "normalized": {"priority": "URGENT", "work_order_type": "PLUMB"},
+        }
+        with patch("app.ai_endpoints.load_code_values_for_normalizer", return_value=code_values):
+            with patch("app.ai_endpoints.validate_ai_output", return_value=validation_result):
+                with TestClient(app_main.app) as client:
+                    response = client.post(
+                        "/api/ai/cmms-intake",
+                        headers={"x-api-key": "code-normalizer-test-key"},
+                        json=self.payload(),
+                    )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data["code_normalization"]["applied"]["work_order_type"], "PLUMB")
+        self.assertEqual(data["result"]["work_order_type"], "PLUMB")
+        self.assertEqual(data["ai_validation"]["normalized"].get("work_order_type"), "PLUMB")
 
 
 if __name__ == "__main__":

@@ -60,6 +60,7 @@ def failed_code_normalization_block(message: str) -> dict[str, Any]:
 def build_code_normalizer_context(
     *,
     text: str,
+    text_summary: str | None = None,
     environment_code: str,
     result: dict[str, Any],
     raw_extracted_fields: dict[str, Any],
@@ -68,7 +69,7 @@ def build_code_normalizer_context(
 ) -> dict[str, Any]:
     return {
         "environment_code": environment_code,
-        "text": clean_text(text, MAX_TEXT_CONTEXT_LENGTH),
+        "text": clean_text(text_summary if text_summary is not None else text, MAX_TEXT_CONTEXT_LENGTH),
         "result": result,
         "raw_extracted_fields": raw_extracted_fields,
         "invalid_code_candidates": invalid_code_candidates,
@@ -187,3 +188,35 @@ def enabled_codes_by_field(code_values: dict[str, list[dict[str, Any]]]) -> dict
     for field, category in SUPPORTED_NORMALIZATION_FIELDS.items():
         result[field] = {str(row["code"]) for row in code_values.get(category, []) if row.get("code")}
     return result
+
+
+def code_value_matches(value: Any, rows: list[dict[str, Any]]) -> bool:
+    text = clean_text(value, 240).casefold()
+    if not text:
+        return False
+    for row in rows:
+        candidates = [row.get("code"), row.get("label")]
+        aliases = row.get("aliases") or ""
+        candidates.extend(part.strip() for part in str(aliases).split(",") if part.strip())
+        for candidate in candidates:
+            if clean_text(candidate, 240).casefold() == text:
+                return True
+    return False
+
+
+def collect_invalid_code_candidates(
+    *,
+    result: dict[str, Any],
+    existing_candidates: dict[str, Any],
+    code_values: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    candidates = dict(existing_candidates or {})
+    for field, category in SUPPORTED_NORMALIZATION_FIELDS.items():
+        if field in candidates:
+            continue
+        value = result.get(field)
+        if not clean_text(value, 240):
+            continue
+        if not code_value_matches(value, code_values.get(category, [])):
+            candidates[field] = value
+    return candidates

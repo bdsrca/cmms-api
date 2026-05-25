@@ -16,6 +16,7 @@ from .cmms_action_plan import build_initial_action_plan, create_work_order_idemp
 from .code_normalizer import (
     apply_code_normalization_suggestions,
     build_code_normalizer_context,
+    collect_invalid_code_candidates,
     enabled_codes_by_field,
     failed_code_normalization_block,
     load_code_values_for_normalizer,
@@ -490,6 +491,9 @@ def validate_intake(
 
 def redacted_summary(text: str, max_len: int = 180) -> str:
     cleaned = " ".join((text or "").split())
+    cleaned = re.sub(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "[email]", cleaned)
+    cleaned = re.sub(r"\b(?:phone(?: number)?|telephone|mobile)\s*(?:is|:)?\s*[+()0-9][0-9+() .-]{2,79}", "phone [phone]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b[+()0-9][0-9+() .-]{6,}\b", "[phone]", cleaned)
     if len(cleaned) > max_len:
         cleaned = cleaned[: max_len - 3] + "..."
     return cleaned
@@ -893,6 +897,14 @@ async def cmms_intake(
             35,
             input_summary=f"contract_valid={contract_validation['valid']} environment={env_code or 'none'}",
         )
+        code_values: dict[str, list[dict[str, Any]]] = {}
+        if env_code and contract_validation["valid"]:
+            code_values = load_code_values_for_normalizer(env_code)
+            extraction_context["invalid_code_candidates"] = collect_invalid_code_candidates(
+                result=contract_validation["normalized_payload"],
+                existing_candidates=extraction_context["invalid_code_candidates"],
+                code_values=code_values,
+            )
         should_run_normalizer = (
             env_code
             and contract_validation["valid"]
@@ -900,9 +912,9 @@ async def cmms_intake(
         )
         if should_run_normalizer:
             try:
-                code_values = load_code_values_for_normalizer(env_code)
                 normalizer_context = build_code_normalizer_context(
                     text=payload.text,
+                    text_summary=redacted_summary(payload.text, max_len=500),
                     environment_code=env_code,
                     result=contract_validation["normalized_payload"],
                     raw_extracted_fields=extraction_context["raw_extracted_fields"],

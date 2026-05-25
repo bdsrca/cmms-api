@@ -100,7 +100,8 @@ class CodeNormalizerPureFunctionTests(unittest.TestCase):
         from app.code_normalizer import build_code_normalizer_context
 
         context = build_code_normalizer_context(
-            text="This is urgent.",
+            text="This is urgent. Email bdsrca@example.com. Phone 555-1234.",
+            text_summary="This is urgent. Email [redacted]. Phone [redacted].",
             environment_code="DEFAULT",
             result={"priority": "NORMAL", "summary": "Leak."},
             raw_extracted_fields={"priority": "urgent phrase"},
@@ -113,6 +114,9 @@ class CodeNormalizerPureFunctionTests(unittest.TestCase):
         self.assertEqual(context["invalid_code_candidates"]["priority"], "urgent phrase")
         self.assertEqual(context["code_values"]["priorities"][0]["code"], "URGENT")
         self.assertLessEqual(len(context["text"]), 500)
+        self.assertIn("[redacted]", context["text"])
+        self.assertNotIn("bdsrca@example.com", context["text"])
+        self.assertNotIn("555-1234", context["text"])
 
     def test_normalize_model_output_rejects_unknown_fields_and_bad_codes(self) -> None:
         from app.code_normalizer import normalize_code_normalizer_output
@@ -181,6 +185,61 @@ class CodeNormalizerPureFunctionTests(unittest.TestCase):
         self.assertEqual(low["status"], "rejected")
         self.assertEqual(low["rejected"][0]["reason_code"], "confidence_below_threshold")
         self.assertEqual(already_valid["rejected"][0]["reason_code"], "field_already_valid")
+
+    def test_collect_invalid_candidates_for_supported_non_priority_fields(self) -> None:
+        from app.code_normalizer import collect_invalid_code_candidates
+
+        candidates = collect_invalid_code_candidates(
+            result={
+                "priority": "NORMAL",
+                "work_order_type": "very urgent plumbing",
+                "assign_to": "night person",
+                "issue_to": "employee one hundred",
+                "job_type": "fix it now",
+                "building": "ARC",
+            },
+            existing_candidates={},
+            code_values={
+                "priorities": [{"code": "NORMAL", "label": "Normal", "aliases": ""}],
+                "work_order_types": [{"code": "PLUMB", "label": "Plumbing", "aliases": "Pipe"}],
+                "assign_to": [{"code": "TECH-100", "label": "Nina Night", "aliases": ""}],
+                "issue_to_employee_number": [{"code": "100", "label": "Nina Night", "aliases": ""}],
+                "job_type": [{"code": "MAINT", "label": "Maintenance", "aliases": ""}],
+            },
+        )
+
+        self.assertEqual(
+            candidates,
+            {
+                "work_order_type": "very urgent plumbing",
+                "assign_to": "night person",
+                "issue_to": "employee one hundred",
+                "job_type": "fix it now",
+            },
+        )
+
+    def test_collect_invalid_candidates_does_not_flag_code_label_or_alias_matches(self) -> None:
+        from app.code_normalizer import collect_invalid_code_candidates
+
+        candidates = collect_invalid_code_candidates(
+            result={
+                "priority": "Normal",
+                "work_order_type": "Pipe",
+                "assign_to": "TECH-100",
+                "issue_to": "Nina Night",
+                "job_type": "Maintenance",
+            },
+            existing_candidates={},
+            code_values={
+                "priorities": [{"code": "NORMAL", "label": "Normal", "aliases": ""}],
+                "work_order_types": [{"code": "PLUMB", "label": "Plumbing", "aliases": "Pipe"}],
+                "assign_to": [{"code": "TECH-100", "label": "Nina Night", "aliases": ""}],
+                "issue_to_employee_number": [{"code": "100", "label": "Nina Night", "aliases": ""}],
+                "job_type": [{"code": "MAINT", "label": "Maintenance", "aliases": ""}],
+            },
+        )
+
+        self.assertEqual(candidates, {})
 
 
 class CodeNormalizerPromptTests(unittest.TestCase):
