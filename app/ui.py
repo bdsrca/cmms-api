@@ -661,20 +661,20 @@ PORTAL_HTML = r"""<!doctype html>
       inputMode: "text", recognition: null, voiceSupported: null, voiceBaseTranscript: "", voiceFinalTranscript: "",
       voiceStopping: false, voiceStatus: "Idle", voiceSilenceTimer: null, outputs: {},
       lastTestResponse: null, lastTestInput: null, metadataReviewExtracted: null, selectedTestCaseId: null,
-      reviewerPromptComparison: null, systemControlKey: ""
+      reviewerPromptComparison: null, systemControlKey: "", setupStatus: null, backups: []
     };
     const menu = [
       ["orchestration","Orchestration",false,"O"],
       ["dashboard","Dashboard",false,"▦"],["test","Test Console",false,"▶"],["email","Email Intake",false,"✉"],["builder","API Builder",false,"⌘"],["testCases","Test Cases",true,"✓"],["testSuites","Test Suites",true,"✓"],
       ["environments","Environments",true,"◇"],["contracts","Output Contracts",true,"▣"],["prompts","Prompt Versions",true,"✎"],["keys","API Keys",true,"◆"],
       ["users","Users",true,"◉"],["logs","Logs",false,"☰"],["reports","Reports",false,"↗"],["kb","Knowledge Base",false,"◌"],
-      ["remote","Remote Access",true,"⇄"],["system","System",true,"⚙"]
+      ["remote","Remote Access",true,"⇄"],["system","System",true,"⚙"],["setup","Setup Wizard",true,"S"]
     ];
     const menuGroups = [
       ["Operate", ["dashboard", "orchestration", "test", "email", "builder"]],
       ["Configure", ["environments", "contracts", "prompts", "keys"]],
       ["Quality", ["testCases", "testSuites", "logs", "reports", "kb"]],
-      ["Admin", ["users", "remote", "system"]]
+      ["Admin", ["users", "remote", "system", "setup"]]
     ];
     const menuById = Object.fromEntries(menu.map(item => [item[0], item]));
     const codeCategories = [
@@ -805,7 +805,7 @@ PORTAL_HTML = r"""<!doctype html>
     }
     function show(id) {
       state.page = id; renderNav();
-      const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system };
+      const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system, setup: setupWizard };
       handlers[id]();
     }
     async function dashboard() {
@@ -2363,7 +2363,9 @@ Passing readiness means the request is eligible for a controlled workflow. It do
           <div><label>External ID Path</label><input id="cmmsExternalPath" value="${escapeAttr(c.external_id_path || "")}" placeholder="id or data.workOrder.id"></div>
           <div><label>Payload Root Key</label><input id="cmmsPayloadRoot" value="${escapeAttr(c.payload_root_key || "")}" placeholder="workOrder"></div>
           <div><label>Static Headers JSON</label><textarea id="cmmsStaticHeaders" rows="3" placeholder='{"Tenant-ID":"north"}'>${escapeHtml(JSON.stringify(c.static_headers || {}, null, 2))}</textarea></div>
+          <div><label>Field Mappings JSON</label><textarea id="cmmsFieldMappings" rows="6" placeholder='[{"source":"summary","target":"description","required":true}]'>${escapeHtml(JSON.stringify(c.field_mappings || [], null, 2))}</textarea></div>
           <div><label>Auto-push Note</label><textarea id="cmmsNote" rows="3">${escapeHtml(c.auto_push_note || "")}</textarea></div>
+          <div><label>Dry Run Sample JSON</label><textarea id="cmmsDryRunSample" rows="6">${escapeHtml(JSON.stringify({ summary: "Leaking pipe", priority: "High", building: "North", asset_context: { asset_id: "AHU-3" } }, null, 2))}</textarea></div>
           <label><input id="cmmsEnabled" type="checkbox" ${c.enabled ? "checked" : ""}> Enabled</label>
           <label><input id="cmmsAutoPush" type="checkbox" ${c.auto_push_enabled ? "checked" : ""}> Auto-push</label>
           <label><input id="cmmsDryRun" type="checkbox" ${c.dry_run_enabled ? "checked" : ""}> Dry run</label>
@@ -2373,6 +2375,7 @@ Passing readiness means the request is eligible for a controlled workflow. It do
           <button onclick="saveCmmsConnector()">Save</button>
           <button class="secondary" onclick="testCmmsConnector()">Validate</button>
           <button class="secondary" onclick="probeCmmsConnector()">Probe</button>
+          <button class="secondary" onclick="previewCmmsConnectorMapping()">Preview Mapped Payload</button>
           <span class="pill ${c.secret_configured ? "ok" : "warning"}">Secret ${c.secret_configured ? "configured" : "missing"}</span>
         </div>
         <pre id="cmmsConnectorOut" style="min-height:80px">${escapeHtml(JSON.stringify(c, null, 2))}</pre>
@@ -2398,6 +2401,13 @@ Passing readiness means the request is eligible for a controlled workflow. It do
         $("cmmsConnectorOut").textContent = `Invalid Static Headers JSON: ${e.message}`;
         return;
       }
+      let fieldMappings = [];
+      try {
+        fieldMappings = JSON.parse($("cmmsFieldMappings").value || "[]");
+      } catch (e) {
+        $("cmmsConnectorOut").textContent = `Invalid Field Mappings JSON: ${e.message}`;
+        return;
+      }
       const payload = {
         enabled: $("cmmsEnabled").checked,
         auto_push_enabled: $("cmmsAutoPush").checked,
@@ -2412,7 +2422,8 @@ Passing readiness means the request is eligible for a controlled workflow. It do
         require_metadata_review: $("cmmsRequireReview").checked,
         static_headers: staticHeaders,
         payload_root_key: $("cmmsPayloadRoot").value.trim(),
-        auto_push_note: $("cmmsNote").value.trim()
+        auto_push_note: $("cmmsNote").value.trim(),
+        field_mappings: fieldMappings
       };
       if (secret) payload.secret_value = secret;
       state.cmmsConnector = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector`, { method: "PUT", body: JSON.stringify(payload) });
@@ -2431,6 +2442,21 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       await loadCmmsPushEvents();
       $("cmmsConnectorOut").textContent = JSON.stringify(result, null, 2);
       if ($("cmmsPushEvents")) $("cmmsPushEvents").innerHTML = renderCmmsPushEvents();
+    }
+
+    async function previewCmmsConnectorMapping() {
+      let canonicalPayload = {};
+      try {
+        canonicalPayload = JSON.parse($("cmmsDryRunSample").value || "{}");
+      } catch (e) {
+        $("cmmsConnectorOut").textContent = `Invalid Dry Run Sample JSON: ${e.message}`;
+        return;
+      }
+      const result = await api(`/api/admin/environments/${state.selectedEnv}/cmms-connector/dry-run`, {
+        method: "POST",
+        body: JSON.stringify({ canonical_payload: canonicalPayload })
+      });
+      $("cmmsConnectorOut").textContent = JSON.stringify(result, null, 2);
     }
 
     function currentCodeRows() {
@@ -3101,6 +3127,113 @@ Passing readiness means the request is eligible for a controlled workflow. It do
     async function kb() { const data = await api("/api/kb/status"); pageShell("Knowledge Base", `<div class="card"><h2>Future KB interface</h2><div class="card-body"><pre>${JSON.stringify(data, null, 2)}</pre></div></div>`); }
     async function remote() { const data = await api("/api/admin/settings/remote_access_url").catch(()=>({ value:"" })); pageShell("Remote Access", `<div class="card"><h2>Remote link notes</h2><div class="card-body stack"><input id="remoteUrl" value="${data.value||""}" placeholder="https://example.trycloudflare.com"><button onclick="saveRemote()">Save</button><p class="muted">Cloudflare is still started manually. Store the URL here for reference.</p></div></div>`); }
     async function saveRemote() { await api("/api/admin/settings/remote_access_url", { method: "PATCH", body: JSON.stringify({ value: $("remoteUrl").value }) }); remote(); }
+    async function setupWizard() {
+      pageShell("Setup Wizard", `<div class="grid">
+        <div class="card span-8"><h2>Checklist</h2><div class="card-body" id="setupStatus"><p class="muted">Loading checks...</p></div></div>
+        <div class="card span-4"><h2>Backup</h2><div class="card-body stack">
+          <button class="secondary" onclick="refreshSetupStatus()">Refresh Checks</button>
+          <button onclick="createSystemBackup()">Create Backup</button>
+          <button class="secondary" onclick="downloadLatestBackupManifest()">Download Latest Backup Manifest</button>
+          <pre id="backupResult">{}</pre>
+        </div></div>
+        <div class="card span-12"><h2>Backups</h2><div class="card-body" id="setupBackups"><p class="muted">Loading backups...</p></div></div>
+      </div>`);
+      await refreshSetupStatus();
+      await refreshBackups();
+    }
+
+    async function refreshSetupStatus() {
+      const target = $("setupStatus");
+      if (target) target.innerHTML = '<p class="muted">Refreshing checks...</p>';
+      try {
+        const data = await api("/api/admin/setup/status");
+        state.setupStatus = data;
+        if (target) target.innerHTML = renderSetupChecks(data);
+      } catch (e) {
+        if (target) target.innerHTML = `<div class="pill danger">Failed</div><pre>${JSON.stringify(e.data || { detail: e.message }, null, 2)}</pre>`;
+      }
+    }
+
+    async function refreshBackups() {
+      const target = $("setupBackups");
+      if (target) target.innerHTML = '<p class="muted">Refreshing backups...</p>';
+      try {
+        state.backups = await api("/api/admin/system/backups");
+        if (target) target.innerHTML = renderSetupBackups(state.backups);
+      } catch (e) {
+        if (target) target.innerHTML = `<div class="pill danger">Failed</div><pre>${JSON.stringify(e.data || { detail: e.message }, null, 2)}</pre>`;
+      }
+    }
+
+    async function createSystemBackup() {
+      const result = $("backupResult");
+      if (result) result.textContent = "Creating backup...";
+      try {
+        const backup = await api("/api/admin/system/backup", { method: "POST" });
+        if (result) result.textContent = JSON.stringify({ backup_id: backup.backup_id, file_name: backup.file_name, size_bytes: backup.size_bytes }, null, 2);
+        await refreshBackups();
+        await refreshSetupStatus();
+      } catch (e) {
+        if (result) result.textContent = JSON.stringify(e.data || { detail: e.message }, null, 2);
+      }
+    }
+
+    function renderSetupChecks(data) {
+      const items = data?.items || [];
+      if (!items.length) return '<p class="muted">No setup checks returned.</p>';
+      return `<div class="stack">
+        <div class="row"><span class="pill ${statusClass(data.overall_status)}">${escapeHtml(statusLabel(data.overall_status))}</span><span class="muted">${escapeHtml(data.checked_at || "")}</span></div>
+        ${tableScroll(`<table><thead><tr><th>Check</th><th>Status</th><th>Detail</th><th>Recommended action</th></tr></thead><tbody>${items.map(item => `
+          <tr>
+            <td><strong>${escapeHtml(item.label)}</strong></td>
+            <td><span class="pill ${statusClass(item.status)}">${escapeHtml(statusLabel(item.status))}</span></td>
+            <td>${escapeHtml(item.detail || "")}</td>
+            <td>${escapeHtml(item.recommended_action || "")}</td>
+          </tr>`).join("")}</tbody></table>`)}
+      </div>`;
+    }
+
+    function renderSetupBackups(backups) {
+      if (!backups || !backups.length) return '<p class="muted">No backups created yet.</p>';
+      return tableScroll(`<table><thead><tr><th>Created</th><th>Backup</th><th>Size</th><th>Mode</th></tr></thead><tbody>${backups.map(backup => `
+        <tr>
+          <td>${escapeHtml(backup.created_at || "")}</td>
+          <td><strong>${escapeHtml(backup.file_name || backup.backup_id || "")}</strong></td>
+          <td>${escapeHtml(formatBytes(backup.size_bytes || 0))}</td>
+          <td>${escapeHtml(backup.manifest?.restore?.mode || "preview_only")}</td>
+        </tr>`).join("")}</tbody></table>`);
+    }
+
+    function statusClass(status) {
+      if (status === "passed") return "ok";
+      if (status === "failed") return "danger";
+      return "";
+    }
+
+    function statusLabel(status) {
+      return ({ passed: "Passed", warning: "Warning", failed: "Failed", not_checked: "Not checked" })[status] || "Not checked";
+    }
+
+    function formatBytes(value) {
+      const size = Number(value || 0);
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function downloadLatestBackupManifest() {
+      const backup = (state.backups || [])[0];
+      if (!backup?.manifest) { alert("No backup manifest available."); return; }
+      const blob = new Blob([JSON.stringify(backup.manifest, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${backup.backup_id || "backup"}-manifest.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
     async function system() {
       pageShell("System", `<div class="grid"><div class="card span-6"><h2>Status</h2><div class="card-body stack"><label>Local control API key</label><input id="systemKey" type="password" value="${escapeAttr(state.systemControlKey)}" placeholder="Paste generated API key"><button class="secondary" onclick="loadSystemStatus()">Refresh Status</button><pre id="systemStatusOut">{ "status": "Local system controls require an API key and admin session." }</pre></div></div>
       <div class="card span-6"><h2>Local-only controls</h2><div class="card-body row"><button onclick="systemApi('/api/system/ollama/start',{method:'POST'}).then(loadSystemStatus)">Start Ollama</button><button class="secondary" onclick="systemApi('/api/system/ollama/stop',{method:'POST'}).then(loadSystemStatus)">Stop Ollama</button><button class="danger" onclick="systemApi('/api/system/shutdown',{method:'POST'})">Stop API</button></div></div></div>`);

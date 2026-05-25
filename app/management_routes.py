@@ -16,6 +16,12 @@ from .config import MODEL_NAME, SERVICE_NAME
 from .db import LOG_FILE, db_execute, db_fetchone
 from .operations_routes import LogResponse, read_log_lines
 from .security import PortalUser, current_admin, current_user
+from .system_setup import (
+    build_setup_status,
+    create_system_backup,
+    list_system_backups,
+    preview_system_restore,
+)
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -42,6 +48,11 @@ class SystemStatusResponse(BaseModel):
     api_running: bool
     ollama_running: bool
     log_file: str
+
+
+class RestorePreviewRequest(BaseModel):
+    backup_id: str | None = None
+    file_name: str | None = None
 
 
 def now_text() -> str:
@@ -102,6 +113,30 @@ def build_management_router(
             (key, payload.value, now_text()),
         )
         return {"status": "ok", "key": key}
+
+    @router.get("/api/admin/setup/status")
+    async def setup_status(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
+        return build_setup_status()
+
+    @router.post("/api/admin/system/backup")
+    async def create_backup(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
+        try:
+            return create_system_backup(created_by=user.username)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @router.get("/api/admin/system/backups")
+    async def list_backups(user: PortalUser = Depends(current_admin)) -> list[dict[str, Any]]:
+        return list_system_backups()
+
+    @router.post("/api/admin/system/restore-preview")
+    async def restore_preview(payload: RestorePreviewRequest, user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
+        try:
+            return preview_system_restore(backup_id=payload.backup_id, file_name=payload.file_name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.get(
         "/api/system/status",

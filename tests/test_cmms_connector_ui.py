@@ -24,6 +24,16 @@ class CmmsConnectorUiTests(unittest.TestCase):
         self.assertIn("/cmms-connector/probe", html)
         self.assertIn("Probe", html)
 
+    def test_cmms_connector_tab_has_field_mapping_and_dry_run_controls(self) -> None:
+        html = self.portal_source()
+
+        self.assertIn("cmmsFieldMappings", html)
+        self.assertIn("Field Mappings JSON", html)
+        self.assertIn("cmmsDryRunSample", html)
+        self.assertIn("previewCmmsConnectorMapping", html)
+        self.assertIn("/cmms-connector/dry-run", html)
+        self.assertIn("Preview Mapped Payload", html)
+
 
 if __name__ == "__main__":
     unittest.main()

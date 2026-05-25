@@ -169,6 +169,42 @@ def connector_static_headers(connector: dict[str, Any]) -> dict[str, str]:
     return normalize_static_headers(connector.get("static_headers_json"))
 
 
+def normalize_field_mappings(value: Any) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("field_mappings must be valid JSON") from exc
+    if isinstance(value, dict):
+        value = [{"source": source, "target": target} for source, target in value.items()]
+    if not isinstance(value, list):
+        raise ValueError("field_mappings must be an object or list")
+
+    mappings: list[dict[str, Any]] = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise ValueError("each field mapping must be an object")
+        source = normalize_optional_text(raw.get("source"), 160)
+        target = normalize_optional_text(raw.get("target"), 160)
+        if not source and not target:
+            continue
+        if not source or not target:
+            raise ValueError("field mapping source and target are required")
+        mappings.append({"source": source, "target": target, "required": bool(raw.get("required"))})
+    return mappings
+
+
+def field_mappings_json(value: Any) -> str | None:
+    mappings = normalize_field_mappings(value)
+    return json.dumps(mappings, sort_keys=True) if mappings else None
+
+
+def connector_field_mappings(connector: dict[str, Any]) -> list[dict[str, Any]]:
+    return normalize_field_mappings(connector.get("field_mappings_json"))
+
+
 def normalize_optional_text(value: Any, max_length: int = 240) -> str | None:
     text = str(value or "").strip()
     return text[:max_length] if text else None
@@ -203,6 +239,7 @@ def upsert_cmms_connector(environment_code: str, payload: dict[str, Any]) -> dic
     external_id_path = normalize_optional_text(payload.get("external_id_path") if payload.get("external_id_path") is not None else (existing or {}).get("external_id_path"), 160)
     payload_root_key = normalize_optional_text(payload.get("payload_root_key") if payload.get("payload_root_key") is not None else (existing or {}).get("payload_root_key"), 80)
     auto_push_note = normalize_optional_text(payload.get("auto_push_note") if payload.get("auto_push_note") is not None else (existing or {}).get("auto_push_note"), 240)
+    mappings = field_mappings_json(payload.get("field_mappings") if payload.get("field_mappings") is not None else (existing or {}).get("field_mappings_json"))
 
     db_execute(
         """
@@ -211,9 +248,9 @@ def upsert_cmms_connector(environment_code: str, payload: dict[str, Any]) -> dic
             auth_header_name, secret_value, timeout_seconds, http_method,
             success_status_codes, external_id_path, dry_run_enabled,
             require_metadata_review, static_headers_json, payload_root_key,
-            auto_push_note, created_at, updated_at
+            auto_push_note, field_mappings_json, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(environment_code) DO UPDATE SET
             enabled = excluded.enabled,
             auto_push_enabled = excluded.auto_push_enabled,
@@ -230,6 +267,7 @@ def upsert_cmms_connector(environment_code: str, payload: dict[str, Any]) -> dic
             static_headers_json = excluded.static_headers_json,
             payload_root_key = excluded.payload_root_key,
             auto_push_note = excluded.auto_push_note,
+            field_mappings_json = excluded.field_mappings_json,
             updated_at = excluded.updated_at
         """,
         (
@@ -249,6 +287,7 @@ def upsert_cmms_connector(environment_code: str, payload: dict[str, Any]) -> dic
             static_headers,
             payload_root_key,
             auto_push_note,
+            mappings,
             (existing or {}).get("created_at", now),
             now,
         ),
@@ -282,6 +321,7 @@ def public_cmms_connector(connector: dict[str, Any] | None) -> dict[str, Any]:
         "static_headers": connector_static_headers(connector),
         "payload_root_key": connector.get("payload_root_key"),
         "auto_push_note": connector.get("auto_push_note"),
+        "field_mappings": connector_field_mappings(connector),
         "secret_configured": bool(connector.get("secret_value")),
         "created_at": connector.get("created_at"),
         "updated_at": connector.get("updated_at"),
@@ -398,6 +438,61 @@ def value_at_path(data: Any, path: str | None) -> Any:
     return current
 
 
+def set_value_at_path(data: dict[str, Any], path: str, value: Any) -> None:
+    current: dict[str, Any] = data
+    parts = [part.strip() for part in str(path or "").split(".") if part.strip()]
+    for part in parts[:-1]:
+        next_value = current.get(part)
+        if not isinstance(next_value, dict):
+            next_value = {}
+            current[part] = next_value
+        current = next_value
+    if parts:
+        current[parts[-1]] = value
+
+
+def apply_field_mappings(connector: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    mappings = connector_field_mappings(connector)
+    if not mappings:
+        return {
+            "mapped_payload": dict(payload or {}),
+            "mapping_results": [],
+            "missing_required_fields": [],
+            "unmapped_fields": [],
+        }
+
+    mapped_payload: dict[str, Any] = {}
+    mapping_results: list[dict[str, Any]] = []
+    missing_required: list[str] = []
+    mapped_top_level_sources: set[str] = set()
+    for mapping in mappings:
+        source = str(mapping["source"])
+        target = str(mapping["target"])
+        value = value_at_path(payload or {}, source)
+        required = bool(mapping.get("required"))
+        if value in (None, ""):
+            status = "missing_required" if required else "missing_optional"
+            if required:
+                missing_required.append(source)
+        else:
+            status = "mapped"
+            set_value_at_path(mapped_payload, target, value)
+            mapped_top_level_sources.add(source.split(".", 1)[0])
+        mapping_results.append({"source": source, "target": target, "required": required, "status": status})
+
+    unmapped_fields = sorted(
+        key
+        for key in (payload or {}).keys()
+        if key not in mapped_top_level_sources
+    )
+    return {
+        "mapped_payload": mapped_payload,
+        "mapping_results": mapping_results,
+        "missing_required_fields": missing_required,
+        "unmapped_fields": unmapped_fields,
+    }
+
+
 def external_reference_from_response(response_json: Any, path: str | None = None) -> str | None:
     if not isinstance(response_json, dict):
         return None
@@ -412,9 +507,42 @@ def external_reference_from_response(response_json: Any, path: str | None = None
     return None
 
 
-def connector_payload(connector: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def connector_payload(connector: dict[str, Any], payload: dict[str, Any], *, apply_mappings: bool = True) -> dict[str, Any]:
+    payload = apply_field_mappings(connector, payload).get("mapped_payload", payload) if apply_mappings and connector_field_mappings(connector) else payload
     root_key = str(connector.get("payload_root_key") or "").strip()
     return {root_key: payload} if root_key else payload
+
+
+def dry_run_cmms_connector_mapping(environment_code: str, canonical_payload: dict[str, Any] | None) -> dict[str, Any]:
+    env_code = normalize_environment_code(environment_code)
+    connector = get_cmms_connector(env_code)
+    payload = canonical_payload or {}
+    mapping = apply_field_mappings(connector or {}, payload)
+    outgoing_payload = connector_payload(connector or {}, payload)
+    warnings: list[str] = []
+    if not connector:
+        warnings.append("connector_not_configured")
+    elif not connector.get("enabled"):
+        warnings.append("connector_disabled")
+    if connector and not connector.get("endpoint_url"):
+        warnings.append("endpoint_url_required")
+    return {
+        "status": "preview",
+        "dry_run": True,
+        "environment_code": env_code,
+        "connector_configured": bool(connector),
+        "connector_enabled": bool(connector and connector.get("enabled")),
+        "endpoint_url": connector.get("endpoint_url") if connector else None,
+        "http_method": normalize_http_method(connector.get("http_method") if connector else "POST"),
+        "payload_root_key": connector.get("payload_root_key") if connector else None,
+        "canonical_payload": payload,
+        "mapped_payload": mapping["mapped_payload"],
+        "outgoing_payload": outgoing_payload,
+        "mapping_results": mapping["mapping_results"],
+        "missing_required_fields": mapping["missing_required_fields"],
+        "unmapped_fields": mapping["unmapped_fields"],
+        "warnings": warnings,
+    }
 
 
 def record_cmms_push_event(environment_code: str, context: dict[str, Any], result: dict[str, Any]) -> None:
@@ -517,7 +645,7 @@ def probe_cmms_connector(environment_code: str, sender: Any = None) -> dict[str,
             endpoint_url=str(connector.get("endpoint_url")),
             http_method=normalize_http_method(connector.get("http_method")),
             headers={**connector_static_headers(connector), **build_auth_headers(connector)},
-            json_payload=connector_payload(connector, probe_payload),
+            json_payload=connector_payload(connector, probe_payload, apply_mappings=False),
             timeout_seconds=int(connector.get("timeout_seconds") or 5),
         )
     except Exception as exc:

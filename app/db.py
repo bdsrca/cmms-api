@@ -111,6 +111,7 @@ SCHEMA_STATEMENTS = [
         static_headers_json TEXT,
         payload_root_key TEXT,
         auto_push_note TEXT,
+        field_mappings_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(environment_code) REFERENCES environments(environment_code)
@@ -492,6 +493,7 @@ def ensure_schema_columns(conn: sqlite3.Connection) -> None:
         "static_headers_json": "ALTER TABLE cmms_connectors ADD COLUMN static_headers_json TEXT",
         "payload_root_key": "ALTER TABLE cmms_connectors ADD COLUMN payload_root_key TEXT",
         "auto_push_note": "ALTER TABLE cmms_connectors ADD COLUMN auto_push_note TEXT",
+        "field_mappings_json": "ALTER TABLE cmms_connectors ADD COLUMN field_mappings_json TEXT",
     }
     for column, statement in cmms_migrations.items():
         if column not in cmms_columns:

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from .cmms_connectors import (
     cmms_push_gate,
+    dry_run_cmms_connector_mapping,
     get_cmms_connector,
     list_cmms_push_events,
     probe_cmms_connector,
@@ -37,6 +38,11 @@ class CmmsConnectorRequest(BaseModel):
     static_headers: dict[str, str] = Field(default_factory=dict)
     payload_root_key: str | None = Field(default=None, max_length=80)
     auto_push_note: str | None = Field(default=None, max_length=240)
+    field_mappings: list[dict[str, Any]] | dict[str, str] | None = None
+
+
+class CmmsConnectorDryRunRequest(BaseModel):
+    canonical_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/api/admin/environments/{environment_code}/cmms-connector")
@@ -90,6 +96,18 @@ async def probe_environment_cmms_connector(
     user: PortalUser = Depends(current_admin),
 ) -> dict[str, Any]:
     return probe_cmms_connector(environment_code)
+
+
+@router.post("/api/admin/environments/{environment_code}/cmms-connector/dry-run")
+async def dry_run_environment_cmms_connector(
+    environment_code: str,
+    payload: CmmsConnectorDryRunRequest,
+    user: PortalUser = Depends(current_admin),
+) -> dict[str, Any]:
+    try:
+        return dry_run_cmms_connector_mapping(environment_code, payload.canonical_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/admin/environments/{environment_code}/cmms-connector/push-events")
