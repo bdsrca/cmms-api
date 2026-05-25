@@ -922,14 +922,16 @@ PORTAL_HTML = r"""<!doctype html>
       if (data.error) { $("regressionDashboard").innerHTML = `<span class="pill danger">Dashboard unavailable</span><p>${escapeHtml(data.error)}</p>`; return; }
       const readiness = data.required_suite_readiness || {};
       const workflow = data.workflow_summary || {};
+      const pushGate = data.cmms_push_gate_summary || {};
       $("regressionDashboard").innerHTML = `<div class="grid">
         <div class="card span-3"><div class="card-body"><div class="metric">${readiness.passed ?? 0}/${readiness.total ?? 0}</div><div class="muted">Required suites passed</div></div></div>
         <div class="card span-3"><div class="card-body"><div class="metric">${readiness.failed ?? 0}</div><div class="muted">Required suites failed</div></div></div>
         <div class="card span-3"><div class="card-body"><div class="metric">${readiness.not_run ?? 0}</div><div class="muted">Required suites not run</div></div></div>
         <div class="card span-3"><div class="card-body"><div class="metric">${workflow.failed ?? 0}</div><div class="muted">Recent workflow failures</div></div></div>
         <div class="card span-4"><h2>Workflow Summary</h2><div class="card-body">${renderWorkflowSummary(workflow)}</div></div>
+        <div class="card span-4"><h2>CMMS Push Gate</h2><div class="card-body">${renderCmmsPushGateSummary(pushGate)}</div></div>
         <div class="card span-4"><h2>Top Failing Fields</h2><div class="card-body">${renderFailingFields(data.top_failing_fields || [])}</div></div>
-        <div class="card span-4"><h2>Recent Validation Failures</h2><div class="card-body">${renderValidationFailures(data.recent_validation_failures || [])}</div></div>
+        <div class="card span-12"><h2>Recent Validation Failures</h2><div class="card-body">${renderValidationFailures(data.recent_validation_failures || [])}</div></div>
         <div class="span-12 dashboard-regression-details">${collapsiblePanel("Regression details", `<div class="grid">
           <div class="card span-12"><h2>Required Suite Readiness</h2><div class="card-body">${tableScroll(renderRequiredSuiteReadiness(readiness.items || []))}</div></div>
           <div class="card span-12"><h2>Latest Suite Runs</h2><div class="card-body">${tableScroll(renderDashboardSuiteRuns(data.latest_suite_runs || []))}</div></div>
@@ -965,6 +967,21 @@ PORTAL_HTML = r"""<!doctype html>
 
     function renderWorkflowSummary(w) {
       return `<div class="stack"><div>Total: <strong>${w.total ?? 0}</strong></div><div>Completed: <strong>${w.completed ?? 0}</strong></div><div>Warnings: <strong>${w.completed_with_warnings ?? 0}</strong></div><div>Failed: <strong>${w.failed ?? 0}</strong></div><div>Avg duration: <strong>${w.avg_duration_ms ?? 0} ms</strong></div></div>`;
+    }
+
+    function renderCmmsPushGateSummary(summary) {
+      const ready = summary.recent_ready_runs || [];
+      const blocked = summary.recent_blocked_runs || [];
+      return `<div class="stack">
+        <div class="metadata-grid">
+          <div class="metadata-item"><label>Push-ready</label><div class="metadata-value"><strong>${summary.ready_count ?? 0}</strong></div></div>
+          <div class="metadata-item"><label>Blocked</label><div class="metadata-value"><strong>${summary.blocked_count ?? 0}</strong></div></div>
+          <div class="metadata-item"><label>Sent</label><div class="metadata-value"><strong>${summary.sent_count ?? 0}</strong></div></div>
+          <div class="metadata-item"><label>Dry run</label><div class="metadata-value"><strong>${summary.dry_run_count ?? 0}</strong></div></div>
+        </div>
+        <div><strong>Recent ready</strong>${ready.length ? `<table><tbody>${ready.slice(0, 3).map(r => `<tr><td>${escapeHtml(r.run_id)}</td><td>${statusPill(r.status)}</td><td><button class="secondary" onclick="show('logs'); setTimeout(()=>viewWorkflowTrace('${escapeAttr(r.run_id)}'), 100)">View Run</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted">No push-ready runs.</p>'}</div>
+        <div><strong>Recent blocked</strong>${blocked.length ? `<table><tbody>${blocked.slice(0, 3).map(r => `<tr><td>${escapeHtml(r.run_id)}</td><td>${escapeHtml((r.blocked_reasons || []).join(", "))}</td><td><button class="secondary" onclick="show('logs'); setTimeout(()=>viewWorkflowTrace('${escapeAttr(r.run_id)}'), 100)">View Run</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted">No blocked push gates.</p>'}</div>
+      </div>`;
     }
 
     function renderFailingFields(rows) {
@@ -1523,6 +1540,7 @@ PORTAL_HTML = r"""<!doctype html>
       }
       try {
         const trace = await api(`/api/admin/workflow-runs/${data.trace.run_id}`);
+        state.lastWorkflowTrace = trace;
         $(targetId).innerHTML = renderWorkflowTrace(trace);
       } catch (e) {
         $(targetId).innerHTML = `<span class="muted">Trace ${escapeHtml(data.trace.run_id)} is available for admin users.</span>`;
@@ -1545,6 +1563,39 @@ PORTAL_HTML = r"""<!doctype html>
     }
 
     function renderWorkflowTrace(trace) {
+      return renderWorkflowRunDetail(trace);
+    }
+
+    function renderWorkflowRunDetail(trace) {
+      const cmmsPushStep = getTraceStep(trace, "cmms_auto_push");
+      const cmmsPush = cmmsPushStep?.output_json || {};
+      return `<div class="stack">
+        <div class="status-line"><div><strong>Workflow Run Detail</strong><div class="muted">${escapeHtml(trace.run_id)} · ${escapeHtml(trace.endpoint || "")} · ${escapeHtml(trace.environment_code || "")} · ${trace.duration_ms ?? ""} ms</div></div><span class="pill ${trace.status === "failed" ? "danger" : trace.status === "completed_with_warnings" ? "warning" : "ok"}">${escapeHtml(trace.status)}</span></div>
+        <div class="metadata-grid">
+          <div class="metadata-item"><label>Source</label><div class="metadata-value">${escapeHtml(trace.source || "")}</div></div>
+          <div class="metadata-item"><label>Started</label><div class="metadata-value">${escapeHtml(trace.started_at || "")}</div></div>
+          <div class="metadata-item"><label>Finished</label><div class="metadata-value">${escapeHtml(trace.finished_at || "")}</div></div>
+          <div class="metadata-item"><label>CMMS Push</label><div class="metadata-value">${statusPill(cmmsPush.status || "not_run")}</div></div>
+        </div>
+        <div class="row"><button class="secondary" onclick="openCreateTestCaseFromRunModal('${escapeAttr(trace.run_id)}')">Create Test Case</button><button class="secondary" onclick="replayWorkflowRun('${escapeAttr(trace.run_id)}')">Replay Run</button><button class="secondary" onclick="navigator.clipboard?.writeText(JSON.stringify(state.lastWorkflowTrace || {}, null, 2))">Copy Run JSON</button></div>
+        ${renderTraceMetadataReview(trace.metadata_review)}
+        ${renderWorkflowTimeline(trace)}
+        <div class="result-grid">
+          ${renderTraceStepPanel(trace, "output_contract_validation", "Contract Validation")}
+          ${renderTraceStepPanel(trace, "code_normalization_suggestion_agent", "Code Normalization")}
+          ${renderTraceStepPanel(trace, "environment_validation", "Environment Validation")}
+          ${renderTraceStepPanel(trace, "safety_review", "Safety Review")}
+          ${renderTraceStepPanel(trace, "orchestration_summary", "Orchestration Summary")}
+          ${renderTraceStepPanel(trace, "cmms_auto_push", "CMMS Push Gate")}
+        </div>
+      </div>`;
+    }
+
+    function getTraceStep(trace, stepName) {
+      return (trace.steps || []).find(step => step.step_name === stepName);
+    }
+
+    function renderWorkflowTimeline(trace) {
       const icon = { passed: "OK", warning: "WARN", failed: "FAIL", skipped: "SKIP", running: "RUN" };
       const rows = (trace.steps || []).map(step => {
         const model = step.model ? ` - ${escapeHtml(step.model)}` : "";
@@ -1556,10 +1607,18 @@ PORTAL_HTML = r"""<!doctype html>
           <span class="pill ${step.status === "failed" ? "danger" : step.status === "warning" ? "warning" : step.status === "passed" ? "ok" : ""}">${escapeHtml(step.status)}</span>
         </div>`;
       }).join("");
-      return `<div class="status-line"><strong>${escapeHtml(trace.run_id)}</strong><span class="pill ${trace.status === "failed" ? "danger" : trace.status === "completed_with_warnings" ? "warning" : "ok"}">${escapeHtml(trace.status)}</span></div>
-        <div class="row" style="margin:10px 0"><button class="secondary" onclick="createTestCaseFromTrace('${escapeAttr(trace.run_id)}')">Create Test Case from Run</button><button class="secondary" onclick="replayWorkflowRun('${escapeAttr(trace.run_id)}')">Replay Run</button></div>
-        ${renderTraceMetadataReview(trace.metadata_review)}
-        ${rows || '<p class="muted">No steps recorded.</p>'}`;
+      return `<div class="ai-panel"><div class="status-line"><h3>Step Timeline</h3><span class="pill">${(trace.steps || []).length} steps</span></div>${rows || '<p class="muted">No steps recorded.</p>'}</div>`;
+    }
+
+    function renderTraceStepPanel(trace, stepName, label) {
+      const step = getTraceStep(trace, stepName);
+      if (!step) return `<div class="ai-panel"><div class="status-line"><h3>${escapeHtml(label)}</h3><span class="pill warning">not_run</span></div><p class="muted">No ${escapeHtml(label)} step was recorded for this run.</p></div>`;
+      const output = step.output_json || {};
+      const summary = step.output_summary || step.error_message || "";
+      return `<div class="ai-panel"><div class="status-line"><h3>${escapeHtml(label)}</h3><span class="pill ${step.status === "failed" ? "danger" : step.status === "warning" ? "warning" : step.status === "passed" ? "ok" : ""}">${escapeHtml(step.status)}</span></div>
+        ${summary ? `<p class="muted">${escapeHtml(summary)}</p>` : ""}
+        <pre style="min-height:150px">${escapeHtml(JSON.stringify(output, null, 2))}</pre>
+      </div>`;
     }
 
     function renderTraceMetadataReview(review) {
@@ -1718,16 +1777,54 @@ PORTAL_HTML = r"""<!doctype html>
       }
     }
 
-    async function createTestCaseFromTrace(runId) {
-      const name = window.prompt("Test case name", `Replay ${runId}`);
-      if (!name) return;
+    function buildExpectedJsonFromRunTrace(trace) {
+      const contract = getTraceStep(trace, "output_contract_validation")?.output_json || {};
+      const result = contract.normalized_payload || {};
+      const validation = getTraceStep(trace, "environment_validation")?.output_json || {};
+      const issueFields = rows => (rows || []).map(item => item?.field).filter(Boolean);
+      const summary = String(result.summary || "").trim();
+      return {
+        summary_contains: summary ? [summary.slice(0, 40).trim()] : [],
+        building: result.building ?? null,
+        room: result.room ?? null,
+        priority: result.priority ?? null,
+        work_order_type: result.work_order_type ?? null,
+        assign_to: result.assign_to ?? null,
+        issue_to: result.issue_to ?? null,
+        job_type: result.job_type ?? null,
+        contract_valid: contract.valid ?? null,
+        environment_valid: validation.valid ?? null,
+        expected_errors: issueFields(validation.errors),
+        expected_warnings: issueFields(validation.warnings)
+      };
+    }
+
+    function openCreateTestCaseFromRunModal(runId) {
+      const trace = state.lastWorkflowTrace?.run_id === runId ? state.lastWorkflowTrace : { run_id: runId };
+      const expected = buildExpectedJsonFromRunTrace(trace);
+      document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop" id="runTestCaseModal"><div class="modal" style="max-width:860px"><h2>Create Test Case From Run</h2><div class="modal-body stack">
+        <div class="notice">Creates a regression case from stored workflow input when available. Edit the expected JSON before saving.</div>
+        <label>Name</label><input id="runTcName" value="${escapeAttr(`Replay ${runId}`)}">
+        <div class="compact-field-row compact-field-row-two"><div><label>Endpoint</label><input id="runTcEndpoint" value="${escapeAttr(trace.endpoint || "")}" disabled></div><div><label>Environment</label><input id="runTcEnv" value="${escapeAttr(trace.environment_code || "")}" disabled></div></div>
+        <label>Expected JSON</label><textarea id="runTcExpected" style="min-height:260px">${escapeHtml(JSON.stringify(expected, null, 2))}</textarea>
+        <label>Tags</label><input id="runTcTags" value="trace">
+        <label>Notes</label><textarea id="runTcNotes">Created from workflow run ${escapeHtml(runId)}</textarea>
+      </div><div class="modal-actions"><button class="secondary" onclick="$('runTestCaseModal').remove()">Cancel</button><button onclick="saveTestCaseFromRunModal('${escapeAttr(runId)}')">Save Test Case</button></div></div></div>`);
+    }
+
+    async function saveTestCaseFromRunModal(runId) {
+      let expected;
+      try { expected = JSON.parse($("runTcExpected").value); } catch { alert("Expected JSON is invalid."); return; }
       try {
-        const data = await api(`/api/admin/workflow-runs/${runId}/create-test-case`, { method: "POST", body: JSON.stringify({ name, tags: "trace", notes: `Created from workflow run ${runId}` }) });
+        const data = await api(`/api/admin/workflow-runs/${runId}/create-test-case`, { method: "POST", body: JSON.stringify({ name: $("runTcName").value, expected_json: expected, tags: $("runTcTags").value, notes: $("runTcNotes").value }) });
+        $("runTestCaseModal")?.remove();
         alert(`Created test case #${data.test_case_id}`);
       } catch (e) {
         alert(e.message);
       }
     }
+
+    async function createTestCaseFromTrace(runId) { openCreateTestCaseFromRunModal(runId); }
 
     async function replayWorkflowRun(runId) {
       try {
@@ -1995,6 +2092,7 @@ PORTAL_HTML = r"""<!doctype html>
           <label>Text</label><textarea id="bText" class="compact-textarea" oninput="buildCall()">The air conditioner in ARC room 205 is making loud noise.</textarea>
           <label><input id="bReturnValidation" type="checkbox" checked style="width:auto" onchange="buildCall()"> Include readiness validation in examples</label>
           <div class="compact-actions"><button onclick="buildCall()">Generate</button><button class="secondary" onclick="runBuilderValidation()">Run + Validate</button></div>
+          <div class="ai-panel stack"><strong>API Documentation</strong><p class="muted">Export a public-safe Markdown package for endpoint usage, authentication, environment codes, and CMMS safety boundaries.</p><div class="compact-actions"><button class="secondary" onclick="copyApiDocsMarkdown()">Copy API Docs</button><button class="secondary" onclick="downloadApiDocsMarkdown()">Download API Docs</button></div></div>
         </div></div>
         <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Generated calls</div><div class="playground-subtitle">Selectable client examples, request body, response contract, and readiness logic.</div></div><span class="pill">Builder</span></div><div class="run-surface">
           ${collapsiblePanel("Endpoint notes", `<div id="bDoc"></div>`)}
@@ -2091,6 +2189,83 @@ PORTAL_HTML = r"""<!doctype html>
         $("bValidationOut").className = "readiness fail";
         $("bValidationOut").innerHTML = `<strong>API call failed</strong><div class="muted">${escapeHtml(e.message)}</div>`;
       }
+    }
+
+    function apiDocsMarkdown() {
+      return `# CMMS Local AI API Quick Docs
+
+## Authentication
+
+AI endpoints require \`x-api-key\`. Generated API keys call controlled AI endpoints only and do not grant admin portal access.
+
+## Safety Boundary
+
+- No generic \`/chat\` endpoint.
+- Do not expose Ollama directly.
+- AI output is contract-validated and environment-validated before use.
+- CMMS push is controlled by deterministic gates, safety review, handoff readiness, and explicit connector configuration.
+- Email sending is not automatic.
+
+## Common Variables
+
+\`\`\`text
+API_BASE_URL=${$("bBase")?.value || location.origin}
+ENVIRONMENT_CODE=${$("bEnv")?.value || "DEFAULT"}
+LLM_API_KEY=replace-with-generated-key
+\`\`\`
+
+## Controlled AI Endpoints
+
+### POST /api/ai/cmms-intake
+
+Runs text intake, output contract validation, code normalization, environment validation, safety review, orchestration, and CMMS push gate preview.
+
+### POST /api/ai/intake/email
+
+Accepts \`from_email\`, \`to_email\`, \`subject\`, \`body\`, and \`environment_code\`. Uses the same controlled intake workflow with email source metadata.
+
+### POST /api/ai/cmms-assistant
+
+Controlled advisory assistant. It is not a generic chat endpoint and cannot write to CMMS.
+
+### POST /api/ai/extract-work-order-fields
+
+Extracts structured CMMS fields for debugging.
+
+### POST /api/ai/summarize-work-order
+
+Returns a concise summary only.
+
+## Readiness Check
+
+For intake responses, use:
+
+\`\`\`text
+contract.valid == true
+ai_validation.valid == true
+validation.can_create_work_order == true
+review.status == "pass"
+cmms_push.status in ["dry_run", "sent"]
+\`\`\`
+
+Passing readiness means the request is eligible for a controlled workflow. It does not mean an LLM directly created or approved a work order.
+`;
+    }
+
+    async function copyApiDocsMarkdown() {
+      await navigator.clipboard?.writeText(apiDocsMarkdown());
+    }
+
+    function downloadApiDocsMarkdown() {
+      const blob = new Blob([apiDocsMarkdown()], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cmms-local-ai-api-docs-${new Date().toISOString().slice(0, 10)}.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     }
     async function environments() {
       await refreshBase();
@@ -2906,7 +3081,7 @@ PORTAL_HTML = r"""<!doctype html>
       const runs = await api("/api/admin/workflow-runs?limit=25").catch(() => []);
       pageShell("Logs", `<div class="grid">
         <div class="card span-12"><h2>Workflow Runs</h2><div class="card-body">${renderWorkflowRunsTable(runs)}</div></div>
-        <div class="card span-12"><h2>Trace Detail</h2><div class="card-body" id="logTraceDetail"><span class="muted">Select View Trace from a workflow run.</span></div></div>
+        <div class="card span-12"><h2>Workflow Run Detail</h2><div class="card-body" id="logTraceDetail"><span class="muted">Select View Run from a workflow run.</span></div></div>
         <div class="card span-12"><h2>Runtime log</h2><pre>${data.lines.join("\n")}</pre></div>
       </div>`);
     }
@@ -2914,11 +3089,12 @@ PORTAL_HTML = r"""<!doctype html>
     function renderWorkflowRunsTable(rows) {
       if (!rows.length) return '<p class="muted">No workflow runs recorded yet.</p>';
       return `<table><thead><tr><th>Run ID</th><th>Endpoint</th><th>Environment</th><th>Status</th><th>Duration</th><th>Started</th><th>Source</th><th>Actions</th></tr></thead><tbody>${rows.map(r => `
-        <tr><td><strong>${escapeHtml(r.run_id)}</strong></td><td>${escapeHtml(r.endpoint)}</td><td>${escapeHtml(r.environment_code || "")}</td><td><span class="pill ${r.status === "failed" ? "danger" : r.status === "completed_with_warnings" ? "warning" : "ok"}">${escapeHtml(r.status)}</span></td><td>${r.duration_ms ?? ""} ms</td><td>${escapeHtml(r.started_at || "")}</td><td>${escapeHtml(r.source || "")}</td><td><button class="secondary" onclick="viewWorkflowTrace('${escapeAttr(r.run_id)}')">View Trace</button></td></tr>`).join("")}</tbody></table>`;
+        <tr><td><strong>${escapeHtml(r.run_id)}</strong></td><td>${escapeHtml(r.endpoint)}</td><td>${escapeHtml(r.environment_code || "")}</td><td><span class="pill ${r.status === "failed" ? "danger" : r.status === "completed_with_warnings" ? "warning" : "ok"}">${escapeHtml(r.status)}</span></td><td>${r.duration_ms ?? ""} ms</td><td>${escapeHtml(r.started_at || "")}</td><td>${escapeHtml(r.source || "")}</td><td><button class="secondary" onclick="viewWorkflowTrace('${escapeAttr(r.run_id)}')">View Run</button></td></tr>`).join("")}</tbody></table>`;
     }
 
     async function viewWorkflowTrace(runId) {
       const trace = await api(`/api/admin/workflow-runs/${runId}`);
+      state.lastWorkflowTrace = trace;
       $("logTraceDetail").innerHTML = renderWorkflowTrace(trace);
     }
     async function reports() { const data = await api("/api/admin/reports/usage"); pageShell("Reports", `<div class="card"><h2>Usage</h2><div class="card-body">${table(data, ["endpoint","status_code","key_name","environment_code","calls","avg_duration_ms"])}</div></div>`); }

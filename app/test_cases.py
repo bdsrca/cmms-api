@@ -382,6 +382,40 @@ def get_test_case_run(run_id: str) -> dict[str, Any] | None:
     return item
 
 
+def issue_fields(issues: Any) -> list[str]:
+    fields: list[str] = []
+    if not isinstance(issues, list):
+        return fields
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        field = str(issue.get("field") or "").strip()
+        if field and field not in fields:
+            fields.append(field)
+    return fields
+
+
+def expected_json_from_actual_response(actual: dict[str, Any]) -> dict[str, Any]:
+    result = actual.get("result") if isinstance(actual.get("result"), dict) else {}
+    validation = actual.get("ai_validation") if isinstance(actual.get("ai_validation"), dict) else {}
+    contract = actual.get("contract") if isinstance(actual.get("contract"), dict) else {}
+    summary = str(result.get("summary") or actual.get("summary") or "").strip()
+    return {
+        "summary_contains": [summary[:40].strip()] if summary else [],
+        "building": extract_result_value(actual, "building"),
+        "room": extract_result_value(actual, "room"),
+        "priority": extract_result_value(actual, "priority"),
+        "work_order_type": extract_result_value(actual, "work_order_type"),
+        "assign_to": extract_result_value(actual, "assign_to"),
+        "issue_to": extract_result_value(actual, "issue_to"),
+        "job_type": extract_result_value(actual, "job_type"),
+        "contract_valid": contract.get("valid"),
+        "environment_valid": validation.get("valid"),
+        "expected_errors": issue_fields(validation.get("errors")),
+        "expected_warnings": issue_fields(validation.get("warnings")),
+    }
+
+
 async def create_test_case_from_workflow_run(run_id: str, payload: Any, user: Any) -> dict[str, Any]:
     row = db_fetchone(
         """
@@ -399,14 +433,7 @@ async def create_test_case_from_workflow_run(run_id: str, payload: Any, user: An
     if expected_json is None and row["actual_json"]:
         try:
             actual = json.loads(row["actual_json"])
-            expected_json = {
-                "building": extract_result_value(actual, "building"),
-                "room": extract_result_value(actual, "room"),
-                "priority": extract_result_value(actual, "priority"),
-                "work_order_type": extract_result_value(actual, "work_order_type"),
-                "contract_valid": actual.get("contract", {}).get("valid") if isinstance(actual.get("contract"), dict) else None,
-                "environment_valid": actual.get("ai_validation", {}).get("valid") if isinstance(actual.get("ai_validation"), dict) else None,
-            }
+            expected_json = expected_json_from_actual_response(actual)
         except json.JSONDecodeError:
             expected_json = None
 

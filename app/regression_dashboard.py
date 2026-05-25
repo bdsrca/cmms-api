@@ -247,6 +247,94 @@ def regression_recent_validation_failures(limit: int = 20) -> list[dict[str, Any
     return items[:limit]
 
 
+def regression_cmms_push_gate_summary(limit: int = 100) -> dict[str, Any]:
+    rows = db_fetchall(
+        """
+        SELECT s.*, r.environment_code, r.endpoint, r.started_at AS run_started_at
+        FROM workflow_run_steps s
+        LEFT JOIN workflow_runs r ON r.run_id = s.run_id
+        WHERE s.step_name = 'cmms_auto_push'
+        ORDER BY s.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    summary = {
+        "total": 0,
+        "ready_count": 0,
+        "sent_count": 0,
+        "dry_run_count": 0,
+        "blocked_count": 0,
+        "failed_count": 0,
+        "skipped_count": 0,
+        "top_blocked_reasons": [],
+        "recent_ready_runs": [],
+        "recent_blocked_runs": [],
+        "recent_push_events": [],
+    }
+    reason_counts: dict[str, int] = {}
+    ready_statuses = {"sent", "dry_run"}
+    for row in rows:
+        push = json_or_empty(row["output_json"])
+        status = str(push.get("status") or "").strip().lower()
+        if not status:
+            continue
+        summary["total"] += 1
+        if status in ready_statuses:
+            summary["ready_count"] += 1
+        if status == "sent":
+            summary["sent_count"] += 1
+        elif status == "dry_run":
+            summary["dry_run_count"] += 1
+        elif status == "blocked":
+            summary["blocked_count"] += 1
+        elif status == "failed":
+            summary["failed_count"] += 1
+        elif status == "skipped":
+            summary["skipped_count"] += 1
+
+        item = {
+            "run_id": row["run_id"],
+            "endpoint": row["endpoint"],
+            "environment_code": row["environment_code"] or push.get("environment_code"),
+            "status": status,
+            "started_at": row["run_started_at"] or row["started_at"],
+            "blocked_reasons": push.get("blocked_reasons") or [],
+            "external_reference": push.get("external_reference"),
+        }
+        if status in ready_statuses and len(summary["recent_ready_runs"]) < 8:
+            summary["recent_ready_runs"].append(item)
+        if status == "blocked" and len(summary["recent_blocked_runs"]) < 8:
+            summary["recent_blocked_runs"].append(item)
+            for reason in item["blocked_reasons"]:
+                reason_text = str(reason or "").strip()
+                if reason_text:
+                    reason_counts[reason_text] = reason_counts.get(reason_text, 0) + 1
+
+    event_rows = db_fetchall("SELECT * FROM cmms_push_events ORDER BY id DESC LIMIT 8")
+    for event in event_rows:
+        try:
+            blocked_reasons = json.loads(event["blocked_reasons_json"] or "[]")
+        except json.JSONDecodeError:
+            blocked_reasons = []
+        summary["recent_push_events"].append(
+            {
+                "run_id": event["run_id"],
+                "environment_code": event["environment_code"],
+                "status": event["status"],
+                "created_at": event["created_at"],
+                "blocked_reasons": blocked_reasons if isinstance(blocked_reasons, list) else [],
+                "external_reference": event["external_reference"],
+            }
+        )
+
+    summary["top_blocked_reasons"] = [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(reason_counts.items(), key=lambda item: item[1], reverse=True)[:8]
+    ]
+    return summary
+
+
 def build_regression_dashboard() -> dict[str, Any]:
     return {
         "required_suite_readiness": regression_required_suite_readiness(),
@@ -256,4 +344,5 @@ def build_regression_dashboard() -> dict[str, Any]:
         "workflow_summary": regression_workflow_summary(),
         "top_failing_fields": regression_top_failing_fields(),
         "recent_validation_failures": regression_recent_validation_failures(),
+        "cmms_push_gate_summary": regression_cmms_push_gate_summary(),
     }

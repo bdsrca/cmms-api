@@ -123,6 +123,20 @@ response.raise_for_status()
 print(response.json())
 ```
 
+## Export Package
+
+The portal API Builder includes an **API Documentation** panel with a public-safe Markdown export named `CMMS Local AI API Quick Docs`.
+
+Use it when sharing a lightweight integration package with another operator or developer:
+
+- Open `/ui`.
+- Sign in as an operator or admin.
+- Open **API Call Builder**.
+- Choose the endpoint and environment.
+- Use **Copy API Docs** or **Download API Docs**.
+
+The export intentionally documents controlled AI endpoints, API key usage, environment code usage, readiness checks, and safety boundaries. It does not include `.env`, generated API keys, session cookies, SQLite databases, logs, connector secrets, or raw runtime state.
+
 ## AI Endpoints
 
 ### POST /api/ai/cmms-intake

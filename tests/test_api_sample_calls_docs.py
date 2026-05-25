@@ -31,6 +31,8 @@ class ApiSampleCallsDocsTests(unittest.TestCase):
         self.assertIn("### JavaScript fetch", docs)
         self.assertIn("### Python requests", docs)
         self.assertIn("API_SAMPLE_ENDPOINT", docs)
+        self.assertIn("## Export Package", docs)
+        self.assertIn("CMMS Local AI API Quick Docs", docs)
 
     def test_api_builder_exposes_language_dropdown_for_generated_examples(self) -> None:
         html = read("app/ui.py")
