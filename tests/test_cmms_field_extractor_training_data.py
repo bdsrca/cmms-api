@@ -34,6 +34,7 @@ class CmmsFieldExtractorTrainingDataPolicyTests(unittest.TestCase):
         self.assertIn("data/cmms_field_extractor/*.jsonl", gitignore)
         self.assertIn("models/cmms_field_extractor/", gitignore)
         self.assertIn("*.gguf", gitignore)
+        self.assertIn("data/*", gitignore)
         self.assertIn("!data/cmms_field_extractor/.gitkeep", gitignore)
         self.assertIn("!data/cmms_field_extractor/README.md", gitignore)
 
