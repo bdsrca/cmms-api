@@ -24,7 +24,13 @@ from .code_normalizer import (
     skipped_code_normalization_block,
 )
 from .cmms_connectors import auto_push_cmms_payload
-from .config import ADVISORY_WARNING, ALLOWED_REQUEST_TYPES, MODEL_NAME, OLLAMA_CHAT_URL
+from .config import (
+    ADVISORY_WARNING,
+    ALLOWED_REQUEST_TYPES,
+    EXTRACTOR_MODEL_NAME,
+    MODEL_NAME,
+    OLLAMA_CHAT_URL,
+)
 from .db import db_execute
 from .environments import default_workflow_mode, get_environment_values
 from .intake_handoff import build_canonical_cmms_payload_preview, build_environment_handoff_preview
@@ -356,6 +362,10 @@ async def call_ollama(
     return content.strip()
 
 
+def extractor_model_name() -> str:
+    return EXTRACTOR_MODEL_NAME
+
+
 def resolve_validation_lists(request: Any) -> tuple[list[str], list[str], str | None]:
     if getattr(request, "environment_code", None):
         values = get_environment_values(request.environment_code)
@@ -507,7 +517,7 @@ async def summarize_work_order(payload: Any, call_ollama_func: OllamaCaller = ca
 
 async def cmms_assistant(payload: Any, call_ollama_func: OllamaCaller = call_ollama) -> dict[str, Any]:
     messages, prompt_meta = prompt_messages("cmms-assistant", {"text": payload.text})
-    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=extractor_model_name())
     return {
         "mode": "cmms-assistant",
         "response": content,
@@ -532,7 +542,7 @@ async def extract_work_order_fields(payload: Any, call_ollama_func: OllamaCaller
             "valid_priorities": valid_priorities,
         },
     )
-    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=extractor_model_name())
     data = parse_json_response(content)
     result = validate_extracted_fields(data, valid_buildings, valid_priorities)
     return result | {"_environment_code": env_code}
@@ -633,7 +643,7 @@ async def cmms_intake(
             run_id,
             "model_extraction",
             20,
-            model=MODEL_NAME,
+            model=extractor_model_name(),
             prompt_version="pending",
             input_summary=f"text_length={len(payload.text)} buildings={len(valid_buildings)} priorities={len(valid_priorities)} mode={workflow_mode}",
         )
@@ -648,6 +658,7 @@ async def cmms_intake(
         model_call_count = 2
         if workflow_mode == "fast":
             extraction_messages, prompt_meta = prompt_messages("extract-work-order-fields", prompt_context)
+            prompt_meta = {**prompt_meta, "model": extractor_model_name()}
             db_execute(
                 "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
                 (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
@@ -685,7 +696,13 @@ async def cmms_intake(
                 (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
             )
             classifier_data = parse_json_response(await call_ollama_func(intake_messages["classifier"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
-            extractor_data = parse_json_response(await call_ollama_func(intake_messages["field_extractor"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
+            extractor_data = parse_json_response(
+                await call_ollama_func(
+                    intake_messages["field_extractor"],
+                    temperature=prompt_meta["temperature"],
+                    model=extractor_model_name(),
+                )
+            )
             request_type, confidence, fields, validation, extraction_context = validate_intake(
                 classifier_data.get("request_type"),
                 classifier_data.get("confidence"),

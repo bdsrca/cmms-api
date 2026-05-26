@@ -1,8 +1,10 @@
 """Shared configuration constants for extracted modules."""
 
 import json
+import os
 
-MODEL_NAME = "qwen3:8b"
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+EXTRACTOR_MODEL_NAME = os.getenv("EXTRACTOR_MODEL_NAME", MODEL_NAME)
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 SERVICE_NAME = "local-cmms-llm-api"
 ADVISORY_WARNING = "Advisory mode only. No CMMS write-back was performed."
