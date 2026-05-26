@@ -6,6 +6,12 @@ from training.cmms_field_extractor.schema import (
     assistant_payload_errors,
     validate_chat_record,
 )
+from training.cmms_field_extractor.anonymize import (
+    SecretDetectedError,
+    build_chat_record,
+    normalize_expected_payload,
+    reject_if_sensitive,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,3 +125,65 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
         }
 
         self.assertIn("assistant.unsafe_claim:summary", assistant_payload_errors(payload))
+
+
+class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
+    def test_rejects_email_phone_api_key_and_url(self) -> None:
+        samples = [
+            "Contact jane@example.com about the leak.",
+            "Call 416-555-1212 when done.",
+            "Use api_key sk-live-abc123 for the CMMS.",
+            "Post it to https://cmms.example.com/workorders.",
+        ]
+
+        for sample in samples:
+            with self.subTest(sample=sample):
+                with self.assertRaises(SecretDetectedError):
+                    reject_if_sensitive(sample)
+
+    def test_normalizes_expected_payload(self) -> None:
+        normalized = normalize_expected_payload(
+            {
+                "request_type": "Work_Order_Request",
+                "building": "",
+                "room": " B204 ",
+                "asset_hint": "",
+                "priority": "URGENT",
+                "summary": "  Water leak near ceiling.  ",
+                "missing_fields": ["building", "building"],
+                "human_review_recommended": "yes",
+            }
+        )
+
+        self.assertEqual(
+            normalized,
+            {
+                "request_type": "work_order_request",
+                "building": None,
+                "room": "B204",
+                "asset_hint": None,
+                "priority": "urgent",
+                "summary": "Water leak near ceiling.",
+                "missing_fields": ["building"],
+                "human_review_recommended": True,
+            },
+        )
+
+    def test_build_chat_record_returns_valid_record(self) -> None:
+        record = build_chat_record(
+            user_text="Water leak in room B204 at North Campus.",
+            expected={
+                "request_type": "work_order_request",
+                "building": "North Campus",
+                "room": "B204",
+                "asset_hint": None,
+                "priority": "urgent",
+                "summary": "Water leak in room B204",
+                "missing_fields": [],
+                "human_review_recommended": False,
+            },
+        )
+
+        self.assertEqual(validate_chat_record(record), [])
+        self.assertEqual(record["messages"][0]["role"], "system")
+        self.assertIn("Return strict JSON only", record["messages"][0]["content"])
