@@ -6,6 +6,7 @@ from training.cmms_field_extractor.schema import (
     assistant_payload_errors,
     validate_chat_record,
 )
+from training.cmms_field_extractor.split import split_records
 from training.cmms_field_extractor.anonymize import (
     SecretDetectedError,
     build_chat_record,
@@ -187,3 +188,20 @@ class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
         self.assertEqual(validate_chat_record(record), [])
         self.assertEqual(record["messages"][0]["role"], "system")
         self.assertIn("Return strict JSON only", record["messages"][0]["content"])
+
+
+class CmmsFieldExtractorSplitTests(unittest.TestCase):
+    def test_split_records_is_deterministic_and_uses_expected_ratios(self) -> None:
+        records = [{"id": f"example-{index}"} for index in range(20)]
+
+        first = split_records(records, seed=7)
+        second = split_records(records, seed=7)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first["train"]), 14)
+        self.assertEqual(len(first["eval"]), 3)
+        self.assertEqual(len(first["locked_test"]), 3)
+
+    def test_split_records_rejects_too_few_records(self) -> None:
+        with self.assertRaises(ValueError):
+            split_records([{"id": "one"}, {"id": "two"}])
