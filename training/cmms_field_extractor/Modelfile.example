@@ -1,0 +1,12 @@
+# Example Ollama Modelfile for CMMS field extractor v1.
+# Replace paths with local GGUF files produced by the export step.
+
+FROM ./qwen3-8b-instruct.Q4_K_M.gguf
+ADAPTER ./cmms-field-extractor-qwen3-8b-lora-v1.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+
+SYSTEM """
+Extract CMMS work request fields. Return strict JSON only. Never claim a work order was created.
+"""

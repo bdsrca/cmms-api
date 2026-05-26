@@ -213,3 +213,23 @@ class CmmsFieldExtractorTrainingScriptTests(unittest.TestCase):
 
         self.assertTrue(callable(train_unsloth.main))
         self.assertIn("data_path", train_unsloth.parse_args(["--data-path", "train.jsonl"]).__dict__)
+
+
+class CmmsFieldExtractorTrainingDocsTests(unittest.TestCase):
+    def test_modelfile_example_names_base_and_adapter(self) -> None:
+        modelfile = ROOT / "training" / "cmms_field_extractor" / "Modelfile.example"
+        text = modelfile.read_text(encoding="utf-8")
+
+        self.assertIn("FROM", text)
+        self.assertIn("ADAPTER", text)
+        self.assertIn("cmms-field-extractor-qwen3-8b-lora-v1", text)
+
+    def test_training_runbook_covers_eval_ollama_and_rollback(self) -> None:
+        doc = ROOT / "docs" / "cmms-field-extractor-training.md"
+        text = doc.read_text(encoding="utf-8")
+
+        self.assertIn("python -m unittest", text)
+        self.assertIn("ollama create cmms-field-extractor-qwen3-8b-lora-v1", text)
+        self.assertIn("EXTRACTOR_MODEL_NAME", text)
+        self.assertIn("rollback", text.lower())
+        self.assertIn("locked test", text.lower())
