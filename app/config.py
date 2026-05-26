@@ -3,8 +3,19 @@
 import json
 import os
 
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:8b")
-EXTRACTOR_MODEL_NAME = os.getenv("EXTRACTOR_MODEL_NAME", MODEL_NAME)
+
+def model_name_from_env(environ: dict[str, str] | None = None) -> str:
+    values = os.environ if environ is None else environ
+    return values.get("OLLAMA_MODEL", "qwen3:8b")
+
+
+def extractor_model_name_from_env(environ: dict[str, str] | None = None) -> str:
+    values = os.environ if environ is None else environ
+    return values.get("EXTRACTOR_MODEL_NAME", model_name_from_env(values))
+
+
+MODEL_NAME = model_name_from_env()
+EXTRACTOR_MODEL_NAME = extractor_model_name_from_env()
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 SERVICE_NAME = "local-cmms-llm-api"
 ADVISORY_WARNING = "Advisory mode only. No CMMS write-back was performed."

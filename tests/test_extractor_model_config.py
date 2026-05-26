@@ -1,4 +1,3 @@
-import importlib
 import os
 from types import SimpleNamespace
 import unittest
@@ -11,25 +10,22 @@ class ExtractorModelConfigTests(unittest.IsolatedAsyncioTestCase):
         os.environ.pop("EXTRACTOR_MODEL_NAME", None)
 
     def test_extractor_model_defaults_to_global_model(self) -> None:
-        os.environ.pop("OLLAMA_MODEL", None)
-        os.environ.pop("EXTRACTOR_MODEL_NAME", None)
-
         import app.config as config
 
-        importlib.reload(config)
-        self.assertEqual(config.MODEL_NAME, "qwen3:8b")
-        self.assertEqual(config.EXTRACTOR_MODEL_NAME, "qwen3:8b")
+        self.assertEqual(config.model_name_from_env({}), "qwen3:8b")
+        self.assertEqual(config.extractor_model_name_from_env({}), "qwen3:8b")
 
     def test_extractor_model_can_be_overridden_without_changing_global_model(self) -> None:
-        os.environ["OLLAMA_MODEL"] = "qwen3:8b"
-        os.environ["EXTRACTOR_MODEL_NAME"] = "cmms-field-extractor-qwen3-8b-lora-v1"
-
         import app.config as config
 
-        importlib.reload(config)
-        self.assertEqual(config.MODEL_NAME, "qwen3:8b")
+        environ = {
+            "OLLAMA_MODEL": "qwen3:8b",
+            "EXTRACTOR_MODEL_NAME": "cmms-field-extractor-qwen3-8b-lora-v1",
+        }
+
+        self.assertEqual(config.model_name_from_env(environ), "qwen3:8b")
         self.assertEqual(
-            config.EXTRACTOR_MODEL_NAME,
+            config.extractor_model_name_from_env(environ),
             "cmms-field-extractor-qwen3-8b-lora-v1",
         )
 
