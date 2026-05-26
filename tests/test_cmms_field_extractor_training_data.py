@@ -205,3 +205,11 @@ class CmmsFieldExtractorSplitTests(unittest.TestCase):
     def test_split_records_rejects_too_few_records(self) -> None:
         with self.assertRaises(ValueError):
             split_records([{"id": "one"}, {"id": "two"}])
+
+
+class CmmsFieldExtractorTrainingScriptTests(unittest.TestCase):
+    def test_training_script_import_is_dependency_safe(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        self.assertTrue(callable(train_unsloth.main))
+        self.assertIn("data_path", train_unsloth.parse_args(["--data-path", "train.jsonl"]).__dict__)
