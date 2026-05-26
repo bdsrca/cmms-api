@@ -22,5 +22,17 @@ env/
 api_keys.json
 logs/
 data/
+
+# Local CMMS field extractor training data and artifacts
+!data/
+data/cmms_field_extractor/*.jsonl
+data/cmms_field_extractor/raw/
+data/cmms_field_extractor/prepared/
+models/cmms_field_extractor/
+*.gguf
+*.safetensors
+!data/cmms_field_extractor/
+!data/cmms_field_extractor/.gitkeep
+!data/cmms_field_extractor/README.md
 *.db
 *.sqlite
