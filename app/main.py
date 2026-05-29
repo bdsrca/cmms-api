@@ -129,6 +129,8 @@ async def call_ollama(
     temperature: float | None = None,
     model: str = MODEL_NAME,
     response_format: str | None = None,
+    run_id: str | None = None,
+    agent_name: str | None = None,
 ) -> str:
     kwargs: dict[str, Any] = {
         "timeout": timeout,
@@ -137,6 +139,10 @@ async def call_ollama(
     }
     if response_format is not None and supports_kwarg(ai_call_ollama, "response_format"):
         kwargs["response_format"] = response_format
+    if run_id is not None and supports_kwarg(ai_call_ollama, "run_id"):
+        kwargs["run_id"] = run_id
+    if agent_name is not None and supports_kwarg(ai_call_ollama, "agent_name"):
+        kwargs["agent_name"] = agent_name
     return await ai_call_ollama(messages, **kwargs)
 
 

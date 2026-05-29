@@ -112,8 +112,10 @@ def get_workflow_run(run_id: str) -> dict[str, Any] | None:
     if not run:
         return None
     steps = db_fetchall("SELECT * FROM workflow_run_steps WHERE run_id = ? ORDER BY step_order, id", (run_id,))
+    llm_calls = db_fetchall("SELECT * FROM llm_call_events WHERE run_id = ? ORDER BY id", (run_id,))
     result = dict(run)
     result["steps"] = [dict(step) for step in steps]
+    result["llm_calls"] = [dict(call) for call in llm_calls]
     for step in result["steps"]:
         if step.get("output_json"):
             try:
@@ -121,6 +123,64 @@ def get_workflow_run(run_id: str) -> dict[str, Any] | None:
             except json.JSONDecodeError:
                 pass
     return result
+
+
+def record_llm_call_event(
+    *,
+    run_id: str | None,
+    agent_name: str,
+    model: str,
+    temperature: float | None,
+    response_format: str | None,
+    timeout_seconds: int | None,
+    duration_ms: float,
+    status: str,
+    json_parse_status: str | None = None,
+) -> None:
+    db_execute(
+        """
+        INSERT INTO llm_call_events
+        (timestamp, run_id, agent_name, model, temperature, response_format, timeout_seconds, duration_ms, status, json_parse_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            now_text(),
+            run_id,
+            agent_name,
+            model,
+            temperature,
+            response_format,
+            timeout_seconds,
+            duration_ms,
+            status,
+            json_parse_status,
+        ),
+    )
+
+
+def update_latest_llm_call_json_parse_status(
+    *,
+    run_id: str | None,
+    agent_name: str,
+    json_parse_status: str,
+) -> None:
+    if not run_id:
+        return
+    db_execute(
+        """
+        UPDATE llm_call_events
+        SET json_parse_status = ?
+        WHERE id = (
+            SELECT id FROM llm_call_events
+            WHERE run_id = ?
+                AND agent_name = ?
+                AND (json_parse_status = 'pending' OR json_parse_status IS NULL)
+            ORDER BY id DESC
+            LIMIT 1
+        )
+        """,
+        (json_parse_status, run_id, agent_name),
+    )
 
 
 def list_workflow_runs(

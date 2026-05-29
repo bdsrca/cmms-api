@@ -406,6 +406,22 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS llm_call_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        run_id TEXT,
+        agent_name TEXT NOT NULL,
+        model TEXT NOT NULL,
+        temperature REAL,
+        response_format TEXT,
+        timeout_seconds INTEGER,
+        duration_ms REAL NOT NULL,
+        status TEXT NOT NULL,
+        json_parse_status TEXT,
+        FOREIGN KEY(run_id) REFERENCES workflow_runs(run_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS intake_metadata_reviews (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id TEXT NOT NULL UNIQUE,
@@ -428,6 +444,9 @@ INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_endpoint ON workflow_runs(endpoint)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_runs_environment ON workflow_runs(environment_code)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run_id ON workflow_run_steps(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_llm_call_events_run_id ON llm_call_events(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_llm_call_events_agent ON llm_call_events(agent_name)",
+    "CREATE INDEX IF NOT EXISTS idx_llm_call_events_timestamp ON llm_call_events(timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_cmms_push_events_environment ON cmms_push_events(environment_code, id)",
     "CREATE INDEX IF NOT EXISTS idx_cmms_push_events_run_id ON cmms_push_events(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_intake_metadata_reviews_run_id ON intake_metadata_reviews(run_id)",

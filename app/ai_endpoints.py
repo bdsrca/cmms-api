@@ -1,6 +1,7 @@
 """Controlled CMMS AI endpoint orchestration and Ollama call helpers."""
 
 import hashlib
+import inspect
 import logging
 import json
 import re
@@ -58,8 +59,10 @@ from .workflow_trace import (
     fail_workflow_step,
     finish_workflow_run,
     finish_workflow_step,
+    record_llm_call_event,
     start_workflow_run,
     start_workflow_step,
+    update_latest_llm_call_json_parse_status,
 )
 
 OllamaCaller = Callable[..., Awaitable[str]]
@@ -362,6 +365,8 @@ async def call_ollama(
     temperature: float | None = None,
     model: str = MODEL_NAME,
     response_format: str | None = None,
+    run_id: str | None = None,
+    agent_name: str | None = None,
 ) -> str:
     payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
     resolved_response_format = ollama_response_format(response_format)
@@ -369,7 +374,7 @@ async def call_ollama(
         payload["format"] = resolved_response_format
     if temperature is not None:
         payload["options"] = {"temperature": temperature}
-    agent_name = infer_llm_agent_name(messages)
+    resolved_agent_name = agent_name or infer_llm_agent_name(messages)
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -377,7 +382,8 @@ async def call_ollama(
             response.raise_for_status()
     except httpx.TimeoutException as exc:
         audit_llm_call(
-            agent_name=agent_name,
+            run_id=run_id,
+            agent_name=resolved_agent_name,
             model=model,
             temperature=temperature,
             response_format=resolved_response_format,
@@ -388,7 +394,8 @@ async def call_ollama(
         raise HTTPException(status_code=502, detail="Ollama request timed out") from exc
     except httpx.HTTPStatusError as exc:
         audit_llm_call(
-            agent_name=agent_name,
+            run_id=run_id,
+            agent_name=resolved_agent_name,
             model=model,
             temperature=temperature,
             response_format=resolved_response_format,
@@ -399,7 +406,8 @@ async def call_ollama(
         raise HTTPException(status_code=502, detail=f"Ollama returned HTTP {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
         audit_llm_call(
-            agent_name=agent_name,
+            run_id=run_id,
+            agent_name=resolved_agent_name,
             model=model,
             temperature=temperature,
             response_format=resolved_response_format,
@@ -413,7 +421,8 @@ async def call_ollama(
         content = data["message"]["content"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         audit_llm_call(
-            agent_name=agent_name,
+            run_id=run_id,
+            agent_name=resolved_agent_name,
             model=model,
             temperature=temperature,
             response_format=resolved_response_format,
@@ -424,7 +433,8 @@ async def call_ollama(
         raise HTTPException(status_code=502, detail="Ollama returned an unexpected response") from exc
     if not isinstance(content, str):
         audit_llm_call(
-            agent_name=agent_name,
+            run_id=run_id,
+            agent_name=resolved_agent_name,
             model=model,
             temperature=temperature,
             response_format=resolved_response_format,
@@ -434,7 +444,8 @@ async def call_ollama(
         )
         raise HTTPException(status_code=502, detail="Ollama returned an unexpected response")
     audit_llm_call(
-        agent_name=agent_name,
+        run_id=run_id,
+        agent_name=resolved_agent_name,
         model=model,
         temperature=temperature,
         response_format=resolved_response_format,
@@ -474,6 +485,7 @@ def infer_llm_agent_name(messages: list[dict[str, str]]) -> str:
 
 def audit_llm_call(
     *,
+    run_id: str | None,
     agent_name: str,
     model: str,
     temperature: float | None,
@@ -492,6 +504,74 @@ def audit_llm_call(
         duration_ms,
         status,
     )
+    try:
+        record_llm_call_event(
+            run_id=run_id,
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=response_format,
+            timeout_seconds=timeout,
+            duration_ms=duration_ms,
+            status=status,
+            json_parse_status="pending" if response_format == "json" and status == "ok" else None,
+        )
+    except Exception as exc:  # pragma: no cover - audit must never break LLM calls.
+        logger.warning("llm_call_event_insert_failed error=%s", exc)
+
+
+async def call_llm_agent(
+    call_ollama_func: OllamaCaller,
+    messages: list[dict[str, str]],
+    *,
+    timeout: int,
+    temperature: float | None,
+    model: str,
+    run_id: str | None,
+    agent_name: str,
+    response_format: str | None = None,
+) -> str:
+    kwargs: dict[str, Any] = {
+        "timeout": timeout,
+        "temperature": temperature,
+        "model": model,
+    }
+    if response_format is not None and llm_caller_supports_kwarg(call_ollama_func, "response_format"):
+        kwargs["response_format"] = response_format
+    if run_id is not None and llm_caller_supports_kwarg(call_ollama_func, "run_id"):
+        kwargs["run_id"] = run_id
+    if llm_caller_supports_kwarg(call_ollama_func, "agent_name"):
+        kwargs["agent_name"] = agent_name
+    return await call_ollama_func(messages, **kwargs)
+
+
+def llm_caller_supports_kwarg(func: Any, name: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()) or name in signature.parameters
+
+
+def parse_json_response_for_agent(content: str, *, run_id: str | None, agent_name: str) -> dict[str, Any]:
+    try:
+        parsed = parse_json_response(content)
+    except HTTPException:
+        mark_llm_json_parse_status(run_id=run_id, agent_name=agent_name, json_parse_status="failed")
+        raise
+    mark_llm_json_parse_status(run_id=run_id, agent_name=agent_name, json_parse_status="success")
+    return parsed
+
+
+def mark_llm_json_parse_status(*, run_id: str | None, agent_name: str, json_parse_status: str) -> None:
+    try:
+        update_latest_llm_call_json_parse_status(
+            run_id=run_id,
+            agent_name=agent_name,
+            json_parse_status=json_parse_status,
+        )
+    except Exception as exc:  # pragma: no cover - tracing must never break workflow execution.
+        logger.warning("llm_json_parse_status_update_failed error=%s", exc)
 
 
 def ollama_response_format(response_format: str | None) -> str | None:
@@ -839,14 +919,19 @@ async def cmms_intake(
                 model_call_count = 0
                 fast_cache = fast_cache_block("hit", cache_key)
             else:
-                extracted_data = parse_json_response(
-                    await call_ollama_func(
+                extracted_data = parse_json_response_for_agent(
+                    await call_llm_agent(
+                        call_ollama_func,
                         extraction_messages,
                         timeout=EXTRACTOR_TIMEOUT_SECONDS,
                         temperature=prompt_meta["temperature"],
                         model=prompt_meta["model"],
                         response_format="json",
-                    )
+                        run_id=run_id,
+                        agent_name="field_extractor",
+                    ),
+                    run_id=run_id,
+                    agent_name="field_extractor",
                 )
                 write_fast_extraction_cache(cache_key, extracted_data)
                 model_call_count = 1
@@ -864,22 +949,33 @@ async def cmms_intake(
                 "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
                 (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
             )
-            classifier_data = parse_json_response(
-                await call_ollama_func(
+            classifier_data = parse_json_response_for_agent(
+                await call_llm_agent(
+                    call_ollama_func,
                     intake_messages["classifier"],
                     timeout=CLASSIFIER_TIMEOUT_SECONDS,
                     temperature=prompt_meta["temperature"],
                     model=classifier_model_name(),
-                )
+                    response_format="json",
+                    run_id=run_id,
+                    agent_name="classifier",
+                ),
+                run_id=run_id,
+                agent_name="classifier",
             )
-            extractor_data = parse_json_response(
-                await call_ollama_func(
+            extractor_data = parse_json_response_for_agent(
+                await call_llm_agent(
+                    call_ollama_func,
                     intake_messages["field_extractor"],
                     timeout=EXTRACTOR_TIMEOUT_SECONDS,
                     temperature=prompt_meta["temperature"],
                     model=extractor_model_name(),
                     response_format="json",
-                )
+                    run_id=run_id,
+                    agent_name="field_extractor",
+                ),
+                run_id=run_id,
+                agent_name="field_extractor",
             )
             request_type, confidence, fields, validation, extraction_context = validate_intake(
                 classifier_data.get("request_type"),
@@ -1128,12 +1224,21 @@ async def cmms_intake(
                         current_step,
                     ),
                 )
-                normalizer_raw = await call_ollama_func(
+                normalizer_raw = await call_llm_agent(
+                    call_ollama_func,
                     normalizer_messages,
+                    timeout=EXTRACTOR_TIMEOUT_SECONDS,
                     temperature=normalizer_prompt_meta["temperature"],
                     model=normalizer_prompt_meta["model"],
+                    response_format="json",
+                    run_id=run_id,
+                    agent_name="code_normalizer",
                 )
-                normalizer_data = parse_json_response(normalizer_raw)
+                normalizer_data = parse_json_response_for_agent(
+                    normalizer_raw,
+                    run_id=run_id,
+                    agent_name="code_normalizer",
+                )
                 normalized_suggestions = normalize_code_normalizer_output(
                     normalizer_data,
                     enabled_codes_by_field=enabled_codes_by_field(code_values),
@@ -1272,14 +1377,19 @@ async def cmms_intake(
                 (intake_messages or {})["draft_generator"][0],
                 {"role": "user", "content": json.dumps(draft_context)},
             ]
-            draft_data = parse_json_response(
-                await call_ollama_func(
+            draft_data = parse_json_response_for_agent(
+                await call_llm_agent(
+                    call_ollama_func,
                     draft_messages,
                     timeout=DRAFT_TIMEOUT_SECONDS,
                     temperature=prompt_meta["temperature"],
                     model=draft_model_name(),
                     response_format="json",
-                )
+                    run_id=run_id,
+                    agent_name="draft_generator",
+                ),
+                run_id=run_id,
+                agent_name="draft_generator",
             )
             drafts = {
                 "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
@@ -1330,6 +1440,7 @@ async def cmms_intake(
                 call_ollama_func=call_ollama_func,
                 prompt_id=reviewer_prompt_id,
                 timeout=REVIEWER_TIMEOUT_SECONDS,
+                run_id=run_id,
             )
             db_execute(
                 "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",

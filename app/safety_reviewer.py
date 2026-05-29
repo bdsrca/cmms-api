@@ -1,10 +1,12 @@
 """Safety reviewer agent helpers for controlled CMMS intake workflows."""
 
 import json
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .prompts import prompt_messages
+from .workflow_trace import update_latest_llm_call_json_parse_status
 
 REVIEW_SOURCE = "safety_reviewer_agent"
 ALLOWED_REVIEW_STATUSES = {"pass", "warning", "fail"}
@@ -112,6 +114,7 @@ async def run_safety_reviewer_agent(
     call_ollama_func: ReviewerCaller,
     prompt_id: int | None = None,
     timeout: int = 45,
+    run_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     context_json = reviewer_context_json(
         result=result,
@@ -123,15 +126,43 @@ async def run_safety_reviewer_agent(
     messages, prompt_meta = prompt_messages(endpoint, {"context_json": context_json}, prompt_id)
     prompt_meta = {**prompt_meta, "endpoint": endpoint}
     try:
-        content = await call_ollama_func(
-            messages,
-            timeout=timeout,
-            temperature=prompt_meta["temperature"],
-            model=prompt_meta["model"],
-        )
+        kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "temperature": prompt_meta["temperature"],
+            "model": prompt_meta["model"],
+        }
+        if _supports_kwarg(call_ollama_func, "response_format"):
+            kwargs["response_format"] = "json"
+        if run_id is not None and _supports_kwarg(call_ollama_func, "run_id"):
+            kwargs["run_id"] = run_id
+        if _supports_kwarg(call_ollama_func, "agent_name"):
+            kwargs["agent_name"] = "safety_reviewer"
+        content = await call_ollama_func(messages, **kwargs)
         parsed = json.loads(content.strip())
     except json.JSONDecodeError:
+        _mark_reviewer_json_status(run_id, "failed")
         return failed_reviewer_block("Safety reviewer returned invalid JSON"), prompt_meta
     if not isinstance(parsed, dict):
+        _mark_reviewer_json_status(run_id, "failed")
         return failed_reviewer_block("Safety reviewer returned invalid JSON"), prompt_meta
+    _mark_reviewer_json_status(run_id, "success")
     return normalize_reviewer_output(parsed), prompt_meta
+
+
+def _supports_kwarg(func: Any, name: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()) or name in signature.parameters
+
+
+def _mark_reviewer_json_status(run_id: str | None, json_parse_status: str) -> None:
+    try:
+        update_latest_llm_call_json_parse_status(
+            run_id=run_id,
+            agent_name="safety_reviewer",
+            json_parse_status=json_parse_status,
+        )
+    except Exception:
+        pass

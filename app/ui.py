@@ -1683,6 +1683,7 @@ PORTAL_HTML = r"""<!doctype html>
         <div class="row"><button class="secondary" onclick="openCreateTestCaseFromRunModal('${escapeAttr(trace.run_id)}')">Create Test Case</button><button class="secondary" onclick="replayWorkflowRun('${escapeAttr(trace.run_id)}')">Replay Run</button><button class="secondary" onclick="navigator.clipboard?.writeText(JSON.stringify(state.lastWorkflowTrace || {}, null, 2))">Copy Run JSON</button></div>
         ${renderTraceMetadataReview(trace.metadata_review)}
         ${renderWorkflowTimeline(trace)}
+        ${renderLlmCallTimeline(trace.llm_calls || [])}
         <div class="result-grid">
           ${renderTraceStepPanel(trace, "output_contract_validation", "Contract Validation")}
           ${renderTraceStepPanel(trace, "code_normalization_suggestion_agent", "Code Normalization")}
@@ -1711,6 +1712,34 @@ PORTAL_HTML = r"""<!doctype html>
         </div>`;
       }).join("");
       return `<div class="ai-panel"><div class="status-line"><h3>Step Timeline</h3><span class="pill">${(trace.steps || []).length} steps</span></div>${rows || '<p class="muted">No steps recorded.</p>'}</div>`;
+    }
+
+    function renderLlmCallTimeline(calls) {
+      const rows = (calls || []).map(call => {
+        const parseStatus = call.json_parse_status || "not_recorded";
+        return `<tr>
+          <td>${escapeHtml(call.agent_name || "unknown")}</td>
+          <td>${escapeHtml(call.model || "")}</td>
+          <td>${escapeHtml(call.response_format || "none")}</td>
+          <td>${escapeHtml(String(call.timeout_seconds ?? ""))}</td>
+          <td>${escapeHtml(String(call.duration_ms ?? ""))}</td>
+          <td>${llmCallStatusPill(call.status || "unknown")}</td>
+          <td>${llmJsonStatusPill(parseStatus)}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="ai-panel"><div class="status-line"><h3>LLM Calls</h3><span class="pill">${(calls || []).length} calls</span></div>
+        ${rows ? `<div class="table-wrap"><table><thead><tr><th>Agent</th><th>Model</th><th>Format</th><th>Timeout</th><th>Duration</th><th>Status</th><th>JSON</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">No LLM calls recorded for this run.</p>'}
+      </div>`;
+    }
+
+    function llmCallStatusPill(status) {
+      const cls = status === "ok" ? "ok" : status === "timeout" || status === "bad_response" || String(status).startsWith("http_") ? "danger" : "warning";
+      return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
+    }
+
+    function llmJsonStatusPill(status) {
+      const cls = status === "success" ? "ok" : status === "failed" ? "danger" : status === "pending" ? "warning" : "";
+      return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
     }
 
     function renderTraceStepPanel(trace, stepName, label) {
@@ -3883,6 +3912,12 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       link.remove();
       URL.revokeObjectURL(url);
     }
+    function aiConfigBanner(config) {
+      const warnings = (config?.warnings || []).map(w => `<li>${escapeHtml(w)}</li>`).join("");
+      if (!warnings) return "";
+      return `<div class="notice warning span-12"><strong>AI model warning</strong><ul>${warnings}</ul></div>`;
+    }
+
     function renderAiConfigPanel(config) {
       if (!config || config.error) return `<div class="card span-12"><h2>AI model controls</h2><div class="card-body"><p class="muted">${escapeHtml(config?.error || "Unavailable")}</p></div></div>`;
       const modelRows = Object.entries(config.models || {}).map(([name, value]) => {
@@ -3891,12 +3926,11 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       }).join("");
       const switchRows = Object.entries(config.switches || {}).map(([name, enabled]) => `<div class="status-row"><span>${escapeHtml(name)}</span><strong>${enabled ? "On" : "Off"}</strong></div>`).join("");
       const timeoutRows = Object.entries(config.timeouts_seconds || {}).map(([name, value]) => `<div class="status-row"><span>${escapeHtml(name)}</span><strong>${escapeHtml(String(value))}s</strong></div>`).join("");
-      const warnings = (config.warnings || []).map(w => `<li>${escapeHtml(w)}</li>`).join("");
       return `<div class="card span-12"><h2>AI model controls</h2><div class="card-body grid">
+        ${aiConfigBanner(config)}
         <div class="span-6 dashboard-status-list"><h3>Models</h3>${modelRows}</div>
         <div class="span-3 dashboard-status-list"><h3>Switches</h3>${switchRows}</div>
         <div class="span-3 dashboard-status-list"><h3>Timeouts</h3>${timeoutRows}<div class="status-row"><span>Review threshold</span><strong>${escapeHtml(String(config.low_confidence_review_threshold ?? ""))}</strong></div></div>
-        ${warnings ? `<div class="span-12"><ul class="muted">${warnings}</ul></div>` : ""}
       </div></div>`;
     }
 

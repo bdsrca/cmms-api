@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -95,6 +97,33 @@ class AiRuntimeConfigTests(unittest.TestCase):
         self.assertTrue(validation["can_create_work_order"])
         self.assertTrue(validation["needs_human_review"])
         self.assertTrue(any("confidence" in warning.lower() for warning in validation["warnings"]))
+
+    def test_workflow_run_detail_includes_structured_llm_call_events(self) -> None:
+        import app.db as db
+        from app.workflow_trace import get_workflow_run, record_llm_call_event, start_workflow_run
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            with patch.object(db, "DB_FILE", Path(tmp) / "test.db"):
+                db.init_db()
+                run_id = start_workflow_run("cmms-intake")
+                record_llm_call_event(
+                    run_id=run_id,
+                    agent_name="classifier",
+                    model="qwen3:8b",
+                    temperature=0.0,
+                    response_format="json",
+                    timeout_seconds=30,
+                    duration_ms=12.5,
+                    status="ok",
+                    json_parse_status="success",
+                )
+
+                run = get_workflow_run(run_id)
+
+        self.assertIsNotNone(run)
+        self.assertEqual(run["llm_calls"][0]["agent_name"], "classifier")
+        self.assertEqual(run["llm_calls"][0]["model"], "qwen3:8b")
+        self.assertEqual(run["llm_calls"][0]["json_parse_status"], "success")
 
 
 if __name__ == "__main__":

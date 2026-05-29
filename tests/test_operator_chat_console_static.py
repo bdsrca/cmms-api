@@ -62,7 +62,14 @@ class OperatorChatConsoleStaticTests(unittest.TestCase):
 
         self.assertIn("/api/admin/ai-config", ui)
         self.assertIn("AI model controls", ui)
+        self.assertIn("aiConfigBanner", ui)
         self.assertIn("renderAiConfigPanel", ui)
+
+    def test_workflow_detail_renders_structured_llm_calls(self) -> None:
+        ui = (ROOT / "app" / "ui.py").read_text(encoding="utf-8")
+
+        self.assertIn("renderLlmCallTimeline", ui)
+        self.assertIn("llm_calls", ui)
         self.assertIn("appendChatAssistantDelta", ui)
         self.assertIn('aria-label="Delete chat"', ui)
         self.assertIn("chat-message-actions", ui)
