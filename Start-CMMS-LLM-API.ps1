@@ -6,7 +6,7 @@ Set-Location $ProjectRoot
 $ApiUrl = "http://127.0.0.1:8000"
 $UiUrl = "$ApiUrl/ui"
 $OllamaUrl = "http://localhost:11434"
-$ModelName = "qwen3:8b"
+$ModelName = "nexusriot/Qwen3.5-Uncensored-HauhauCS-Aggressive:9b"
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $LogDir = Join-Path $ProjectRoot "logs"
 $LogFile = Join-Path $LogDir "cmms-llm-api.log"

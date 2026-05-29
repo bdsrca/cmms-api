@@ -65,13 +65,13 @@ Evaluate baseline `qwen3:8b` and the candidate model against the same examples. 
 After exporting the model or adapter to GGUF, create the local model:
 
 ```powershell
-ollama create cmms-field-extractor-qwen3-8b-lora-v1 -f training/cmms_field_extractor/Modelfile
+ollama create college-cmms-field-extractor-phi4-v1 -f training/cmms_field_extractor/Modelfile
 ```
 
 Set the extractor route to the candidate:
 
 ```dotenv
-EXTRACTOR_MODEL_NAME=cmms-field-extractor-qwen3-8b-lora-v1
+EXTRACTOR_MODEL_NAME=college-cmms-field-extractor-phi4-v1
 ```
 
 Leave `OLLAMA_MODEL` unchanged unless every model call should move to a new default.

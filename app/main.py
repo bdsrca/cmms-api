@@ -19,6 +19,7 @@ from .ai_endpoints import (
 from .ai_routes import build_ai_router
 from .api_keys import migrate_json_api_keys
 from .auth_routes import router as auth_router
+from .chat_console_routes import router as chat_console_router
 from .cmms_connector_routes import router as cmms_connector_router
 from .cmms_connectors import migrate_plaintext_connector_secrets
 from .core_routes import router as core_router
@@ -93,6 +94,7 @@ logger = logging.getLogger(SERVICE_NAME)
 app = FastAPI(title="Local CMMS LLM API", version="1.0.0")
 app.include_router(core_router)
 app.include_router(auth_router)
+app.include_router(chat_console_router)
 app.include_router(environment_router)
 app.include_router(validation_contract_router)
 app.include_router(operations_router)
@@ -123,8 +125,16 @@ async def call_ollama(
     timeout: int = 120,
     temperature: float | None = None,
     model: str = MODEL_NAME,
+    response_format: str | None = None,
 ) -> str:
-    return await ai_call_ollama(messages, timeout=timeout, temperature=temperature, model=model)
+    kwargs: dict[str, Any] = {
+        "timeout": timeout,
+        "temperature": temperature,
+        "model": model,
+    }
+    if response_format is not None:
+        kwargs["response_format"] = response_format
+    return await ai_call_ollama(messages, **kwargs)
 
 
 async def is_ollama_running() -> bool:

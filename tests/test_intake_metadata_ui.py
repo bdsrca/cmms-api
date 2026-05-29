@@ -33,6 +33,9 @@ class IntakeMetadataUITests(unittest.TestCase):
         self.assertIn("function renderIntakeMetadata(data)", html)
         self.assertIn("Submitted by", html)
         self.assertIn("Requested due", html)
+        self.assertIn("metadata-review-grid", html)
+        self.assertIn("metadata-review-card", html)
+        self.assertIn("metadata-review-actions", html)
         self.assertIn("renderIntakeMetadata(data);", html)
 
     def test_metadata_panel_supports_operator_review_corrections(self) -> None:

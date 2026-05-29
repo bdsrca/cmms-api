@@ -102,6 +102,15 @@ PORTAL_HTML = r"""<!doctype html>
     .metadata-item { border: 1px solid var(--replicate-line); background: #f8fafc; padding: 8px; min-width: 0; }
     .metadata-item label { margin-bottom: 4px; }
     .metadata-value { overflow-wrap: anywhere; }
+    .metadata-review-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+    .metadata-review-card { grid-column: span 3; border: 1px solid #dde4ee; border-radius: 8px; background: #fff; padding: 10px; min-width: 0; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .metadata-review-card-small { grid-column: span 2; }
+    .metadata-review-card-medium { grid-column: span 4; }
+    .metadata-review-card-wide { grid-column: span 6; }
+    .metadata-review-card label { color: #334155; font-size: 11px; letter-spacing: .02em; text-transform: uppercase; margin-bottom: 7px; }
+    .metadata-review-card input { background: #f8fafc; }
+    .metadata-review-value { min-height: 38px; display: flex; align-items: center; overflow-wrap: anywhere; line-height: 1.35; }
+    .metadata-review-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
     .readiness { border-left: 3px solid var(--azure); background: #edf5ff; padding: 10px; }
     .readiness.fail { border-left-color: var(--danger); background: #fff1f1; }
     .readiness.warn { border-left-color: #f1c21b; background: #fcf4d6; }
@@ -594,6 +603,63 @@ PORTAL_HTML = r"""<!doctype html>
     .collapsible-dark .collapsible-content { border-top-color: rgba(148, 163, 184, .2); }
     .collapsible-dark pre { background: transparent; color: #f8fafc; padding: 0; min-height: 180px; }
     .collapsible-toolbar { justify-content: flex-end; margin-bottom: 8px; }
+    .chat-console-shell { margin: -6px -2px 0; border: 1px solid #e5e7eb; background: #fff; min-height: min(760px, calc(100vh - 170px)); display: grid; grid-template-columns: 238px minmax(0, 1fr); overflow: hidden; }
+    .chat-history { background: #f7f7f8; border-right: 1px solid #ececf1; display: flex; flex-direction: column; min-height: 0; }
+    .chat-history-header { padding: 12px; display: grid; gap: 8px; }
+    .chat-history-header button { width: 100%; justify-content: flex-start; }
+    .chat-sidebar-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .chat-sidebar-actions .secondary { padding-inline: 10px; color: #6b7280; }
+    .chat-history-list { padding: 2px 8px 12px; overflow: auto; display: grid; align-content: start; gap: 2px; }
+    .chat-history-item { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; gap: 2px; border-radius: 8px; padding: 2px; }
+    .chat-history-item:hover, .chat-history-item.active { background: #ececf1; }
+    .chat-history-item button:first-child { min-height: 36px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: transparent; color: #202123; border: 0; box-shadow: none; padding: 8px 10px; }
+    .chat-history-item .delete-chat { width: 28px; min-height: 28px; padding: 0; border: 0; background: transparent; color: #6b7280; box-shadow: none; }
+    .chat-history-item .delete-chat:hover { background: #fff; color: #b91c1c; }
+    .chat-console-main { background: #fff; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; }
+    .chat-console-toolbar { min-height: 58px; border-bottom: 1px solid #f0f0f0; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .chat-console-title strong { font-size: 14px; }
+    .chat-console-toolbar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .chat-console-toolbar select { width: min(420px, 42vw); border-radius: 10px; }
+    .thinking-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; background: #fff; }
+    .chat-messages { overflow: auto; padding: 34px 22px 24px; display: grid; align-content: start; gap: 16px; background: #fff; }
+    .chat-empty { margin: auto; max-width: 520px; text-align: center; color: #6b7280; }
+    .chat-empty h2 { margin: 0 0 8px; font-size: 26px; font-weight: 650; color: #343541; }
+    .chat-empty p { margin: 0; }
+    .chat-bubble { max-width: min(78%, 760px); padding: 12px 14px; white-space: pre-wrap; line-height: 1.55; background: transparent; color: #343541; }
+    .chat-bubble.user { justify-self: end; background: #f4f4f4; border-radius: 18px; color: #111827; }
+    .chat-bubble.assistant { justify-self: start; padding-left: 0; }
+    .chat-message-row { display: grid; gap: 4px; }
+    .chat-message-row.user { justify-items: end; }
+    .chat-message-row.assistant { justify-items: start; }
+    .chat-message-actions { display: flex; gap: 4px; opacity: .35; transition: opacity .12s ease; }
+    .chat-message-row:hover .chat-message-actions { opacity: 1; }
+    .chat-message-actions button { min-height: 28px; padding: 4px 8px; border: 0; background: transparent; box-shadow: none; color: #6b7280; }
+    .chat-message-actions button:hover { background: #f4f4f4; color: #111827; }
+    .chat-composer { padding: 12px 18px 16px; background: #fff; }
+    .chat-composer-shell { max-width: 920px; margin: 0 auto; border: 1px solid #d9d9e3; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.06); background: #fff; padding: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+    .chat-composer-shell.drag-over { border-color: #6b5cff; background: #f7f7ff; }
+    .chat-composer textarea { min-height: 44px; max-height: 170px; resize: vertical; border: 0; box-shadow: none; padding: 10px 2px; }
+    .chat-composer textarea:focus { box-shadow: none; }
+    .chat-input-tools { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; }
+    .chat-icon-button { width: 36px; min-height: 36px; border-radius: 50%; border: 0; background: transparent; color: #555; padding: 0; box-shadow: none; display: inline-grid; place-items: center; font-size: 14px; }
+    .chat-icon-button:hover { background: #f4f4f4; color: #111827; }
+    .chat-icon-button svg, .chat-send-button svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .chat-send-button { width: 40px; min-height: 40px; border-radius: 50%; padding: 0; display: inline-grid; place-items: center; font-size: 17px; }
+    .chat-stop-button { width: 40px; min-height: 40px; border-radius: 50%; padding: 0; display: inline-grid; place-items: center; }
+    .chat-stop-button[hidden] { display: none; }
+    .chat-stop-button::before { content: ""; width: 12px; height: 12px; border-radius: 2px; background: currentColor; }
+    .chat-action-slot { width: 40px; min-height: 40px; display: grid; place-items: center; align-self: end; }
+    .chat-action-slot > button { grid-area: 1 / 1; }
+    .chat-image-preview { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 0 4px; }
+    .chat-image-preview img { width: 42px; height: 42px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+    .chat-attachment-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); padding: 0 4px 2px; }
+    .chat-attachment-note.warning { color: #9a3412; }
+    .chat-image-strip { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .chat-image-strip img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+    .chat-system-prompt { border-bottom: 1px solid #f0f0f0; padding: 10px 18px; background: #fff; }
+    .chat-system-prompt summary { cursor: pointer; color: #4b5563; font-weight: 700; }
+    .chat-system-prompt textarea { margin-top: 8px; min-height: 76px; resize: vertical; }
+    @media (max-width: 900px) { .chat-console-shell { grid-template-columns: 1fr; } .chat-history { max-height: 230px; border-right: 0; border-bottom: 1px solid #ececf1; } .chat-console-toolbar select { width: 100%; max-width: none; } }
     @media (max-width: 1200px) { .contracts-layout { grid-template-columns: 1fr; } }
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
@@ -615,6 +681,7 @@ PORTAL_HTML = r"""<!doctype html>
       .tabs { overflow-x: auto; white-space: nowrap; }
       .span-3,.span-4,.span-5,.span-6,.span-7,.span-8 { grid-column: span 12; }
       .result-grid, .compact-field-row, .compact-field-row-two { grid-template-columns: 1fr; }
+      .metadata-review-card, .metadata-review-card-small, .metadata-review-card-medium, .metadata-review-card-wide { grid-column: span 12; }
     }
   </style>
 </head>
@@ -658,7 +725,7 @@ PORTAL_HTML = r"""<!doctype html>
     const state = {
       me: null, page: "dashboard", envs: [], keys: [], output: {}, selectedEnv: "DEFAULT", defaultApiKey: "",
       envTab: "codes", selectedCategory: "buildings", selectedCode: null, codeData: null, validationRules: [], cmmsConnector: null, cmmsPushEvents: [],
-      inputMode: "text", recognition: null, voiceSupported: null, voiceBaseTranscript: "", voiceFinalTranscript: "",
+      inputMode: "text", recognition: null, voiceSupported: null, voiceBaseTranscript: "", voiceFinalTranscript: "", voiceTargetId: "tText", voiceButtonId: "voiceStartBtn",
       voiceStopping: false, voiceStatus: "Idle", voiceSilenceTimer: null, outputs: {},
       lastTestResponse: null, lastTestInput: null, metadataReviewExtracted: null, selectedTestCaseId: null,
       reviewerPromptComparison: null, systemControlKey: "", setupStatus: null, backups: []
@@ -667,14 +734,14 @@ PORTAL_HTML = r"""<!doctype html>
       ["orchestration","Orchestration",false,"O"],
       ["dashboard","Dashboard",false,"▦"],["test","Test Console",false,"▶"],["email","Email Intake",false,"✉"],["builder","API Builder",false,"⌘"],["testCases","Test Cases",true,"✓"],["testSuites","Test Suites",true,"✓"],
       ["environments","Environments",true,"◇"],["contracts","Output Contracts",true,"▣"],["prompts","Prompt Versions",true,"✎"],["keys","API Keys",true,"◆"],
-      ["users","Users",true,"◉"],["logs","Logs",false,"☰"],["reports","Reports",false,"↗"],["kb","Knowledge Base",false,"◌"],
+      ["users","Users",true,"◉"],["chat","Chat Console",true,"💬"],["logs","Logs",false,"☰"],["reports","Reports",false,"↗"],["kb","Knowledge Base",false,"◌"],
       ["remote","Remote Access",true,"⇄"],["system","System",true,"⚙"],["setup","Setup Wizard",true,"S"]
     ];
     const menuGroups = [
       ["Operate", ["dashboard", "orchestration", "test", "email", "builder"]],
       ["Configure", ["environments", "contracts", "prompts", "keys"]],
       ["Quality", ["testCases", "testSuites", "logs", "reports", "kb"]],
-      ["Admin", ["users", "remote", "system", "setup"]]
+      ["Admin", ["users", "chat", "remote", "system", "setup"]]
     ];
     const menuById = Object.fromEntries(menu.map(item => [item[0], item]));
     const codeCategories = [
@@ -805,7 +872,7 @@ PORTAL_HTML = r"""<!doctype html>
     }
     function show(id) {
       state.page = id; renderNav();
-      const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, logs, reports, kb, remote, system, setup: setupWizard };
+      const handlers = { dashboard, orchestration, test, email: emailIntake, builder, testCases, testSuites, environments, contracts, prompts, keys, users, chat: chatConsole, logs, reports, kb, remote, system, setup: setupWizard };
       handlers[id]();
     }
     async function dashboard() {
@@ -825,13 +892,36 @@ PORTAL_HTML = r"""<!doctype html>
       renderRegressionDashboard(data);
     }
 
+    function orchestrationExampleText() {
+      return "Voice transcript from front desk: requested by Maria Chen, maria.chen@example.com, 416-555-0188. ARC room 205 is too warm and AHU-3 is making a grinding noise. Please create a high priority work order due tomorrow, assign tonight's on-duty HVAC technician, check AHU-3 filter inventory, and prepare a purchase request if filters are not available.";
+    }
+
     function orchestration() {
+      const supported = getSpeechRecognitionCtor();
+      state.voiceSupported = Boolean(supported);
       pageShell("Orchestration", `<div class="grid">
         <div class="card playground span-4"><div class="playground-header"><div><div class="playground-title">Instruction</div><div class="playground-subtitle">cmms-intake orchestration_summary</div></div><span class="pill">dry-run</span></div><div class="card-body stack">
           <details class="credentials-panel"><summary>Test API credentials</summary><div class="compact-field-row"><div><label>API key</label><input id="oKey" type="password" value="${escapeAttr(state.defaultApiKey)}" placeholder="Paste generated API key" oninput="rememberApiKey(this.value)"></div><button class="secondary" onclick="forgetApiKey()">Forget key</button></div></details>
           <div class="compact-field-row compact-field-row-two"><div><label>Environment</label><select id="oEnv" onchange="syncWorkflowModeFromEnvironment('oEnv', 'oWorkflowMode')">${envOptions()}</select></div><div><label>Workflow</label><select id="oWorkflowMode"><option value="fast" selected>Fast</option><option value="full">Full</option></select></div></div>
-          <label>Request</label><textarea id="oText" class="compact-textarea orchestration-textarea">Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.</textarea>
-          <div class="compact-actions"><button id="oRunBtn" onclick="runOrchestration()">Run Orchestration</button><button class="secondary" onclick="setOrchestrationExample()">Reset Example</button></div>
+          <label>Request</label><div class="input-with-voice"><textarea id="oText" class="compact-textarea orchestration-textarea">${escapeHtml(orchestrationExampleText())}</textarea><button id="oVoiceStartBtn" class="voice-icon-button secondary" aria-label="Start voice input" title="Start voice input" onclick="startVoiceRecognition('oText', 'oVoiceStartBtn')" ${supported ? "" : "disabled"}>🎙</button></div>
+          <div class="compact-actions"><button id="oRunBtn" onclick="runOrchestration()">Run Orchestration</button><button class="secondary" onclick="setOrchestrationExample()">Reset Example</button><button class="secondary" onclick="clearVoiceTranscript('oText')">Clear</button></div>
+          <details class="voice-settings"><summary>Voice settings</summary><div class="voice-settings-body stack">
+            <div class="status-line"><strong>Speech provider: Browser Speech Recognition</strong><span id="voiceStatus" class="pill">${escapeHtml(state.voiceStatus || "Idle")}</span></div>
+            ${supported ? "" : '<div class="notice warning">Speech recognition is not available in this browser. Use Chrome, Edge, or Safari, or continue with text input.</div>'}
+            <label>Language</label><select id="voiceLang" onchange="updateVoiceLanguage()">
+              <option value="en-CA">English - Canada</option>
+              <option value="en-US">English - US</option>
+              <option value="zh-CN">Chinese - Simplified Mandarin</option>
+              <option value="zh-TW">Chinese - Traditional Mandarin</option>
+              <option value="fr-CA">French - Canada</option>
+              <option value="es-ES">Spanish - Spain</option>
+              <option value="ja-JP">Japanese</option>
+              <option value="ko-KR">Korean</option>
+            </select>
+            <div class="button-grid"><button class="secondary" onclick="stopVoiceRecognition()" ${supported ? "" : "disabled"}>Stop listening</button></div>
+            <div class="muted">Listening stops automatically after 5 seconds without detected speech.</div>
+            <div id="voiceMessage" class="muted">Speech recognition is handled by the browser. This app does not store audio. Review the transcript before sending.</div>
+          </div></details>
         </div></div>
         <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Execution Plan</div><div class="playground-subtitle" id="oRunLabel">No run yet</div></div><span id="oStatus" class="pill">Ready</span></div>
           <div class="run-surface">
@@ -848,7 +938,7 @@ PORTAL_HTML = r"""<!doctype html>
     }
 
     function setOrchestrationExample() {
-      if ($("oText")) $("oText").value = "Create a high priority work order for AHU-3, assign it to tonight's on-duty technician, check filter inventory, and create a purchase request if none are available.";
+      if ($("oText")) $("oText").value = orchestrationExampleText();
     }
 
     async function runOrchestration() {
@@ -1034,7 +1124,7 @@ PORTAL_HTML = r"""<!doctype html>
             <label>Subject</label><input id="emailSubject" placeholder="Leak in ARC 205">
             <label>Body</label><textarea id="emailBody" class="compact-textarea" placeholder="Paste email body"></textarea>
             <input id="emailImportFile" type="file" accept=".eml,.txt,message/rfc822,text/plain" style="display:none" onchange="handleEmailImport(event)">
-            <div class="compact-actions email-actions"><button class="secondary" onclick="$('emailImportFile').click()">Import</button><button class="secondary" onclick="clearEmailIntake()">Clear</button><button id="eRunBtn" onclick="runEmailIntake()">Run Email</button></div>
+            <div class="compact-actions email-actions"><button class="secondary" onclick="setEmailExample()">Example</button><button class="secondary" onclick="$('emailImportFile').click()">Import</button><button class="secondary" onclick="clearEmailIntake()">Clear</button><button id="eRunBtn" onclick="runEmailIntake()">Run Email</button></div>
           </div>
         </div></div>
         <div class="card playground span-8"><div class="playground-header"><div><div class="playground-title">Response</div><div class="playground-subtitle" id="inputSourceLabel">Input source: email API</div></div><span id="runStatus" class="pill">Ready</span></div>
@@ -1052,6 +1142,12 @@ PORTAL_HTML = r"""<!doctype html>
           </div>
         </div>
       </div>`, "", "Turn pasted maintenance emails into controlled advisory intake drafts.");
+    }
+    function setEmailExample() {
+      if ($("emailFrom")) $("emailFrom").value = "resident.services@example.com";
+      if ($("emailTo")) $("emailTo").value = "maintenance@example.local";
+      if ($("emailSubject")) $("emailSubject").value = "Water leak in ARC Unit 205 before Friday inspection";
+      if ($("emailBody")) $("emailBody").value = "Hello maintenance,\\n\\nThis is requested by Priya Shah. Please use priya.shah@example.com or 416-555-0114 for follow-up. Unit 205 in ARC has water dripping from the ceiling near the supply closet after yesterday's rain. The resident reports a damp ceiling tile and a slipping hazard. Could this be reviewed before the end of this week, ideally before Friday's inspection?\\n\\nThanks,\\nResident Services";
     }
     function renderTestInputPanel() {
       if (!$("testInputPanel")) return;
@@ -1124,16 +1220,18 @@ PORTAL_HTML = r"""<!doctype html>
         $("voiceStatus").className = `pill ${status === "Error" ? "danger" : status === "Listening" ? "ok" : status === "Processing" ? "warning" : ""}`;
       }
       if ($("voiceStartBtn")) $("voiceStartBtn").classList.toggle("listening", status === "Listening");
+      if (state.voiceButtonId && $(state.voiceButtonId)) $(state.voiceButtonId).classList.toggle("listening", status === "Listening");
       if (message && $("voiceMessage")) $("voiceMessage").textContent = message;
     }
-    function transcriptValue() {
-      return ($("tText")?.value || "").trim();
+    function transcriptValue(targetId = state.voiceTargetId || "tText") {
+      return ($(targetId)?.value || "").trim();
     }
     function writeTranscript(interimText = "") {
       const parts = [state.voiceBaseTranscript, state.voiceFinalTranscript, interimText].map(v => (v || "").trim()).filter(Boolean);
-      if ($("tText")) $("tText").value = parts.join(" ");
+      const targetId = state.voiceTargetId || "tText";
+      if ($(targetId)) $(targetId).value = parts.join(" ");
     }
-    function startVoiceRecognition() {
+    function startVoiceRecognition(targetId = "tText", buttonId = "voiceStartBtn") {
       const SpeechRecognitionCtor = getSpeechRecognitionCtor();
       if (!SpeechRecognitionCtor) {
         setVoiceStatus("Error", "Speech recognition is not available in this browser. Use Chrome, Edge, or Safari, or continue with text input.");
@@ -1143,6 +1241,8 @@ PORTAL_HTML = r"""<!doctype html>
         setVoiceStatus("Listening", "Speech recognition is already running.");
         return;
       }
+      state.voiceTargetId = targetId;
+      state.voiceButtonId = buttonId;
       state.voiceBaseTranscript = transcriptValue();
       state.voiceFinalTranscript = "";
       state.voiceStopping = false;
@@ -1181,6 +1281,7 @@ PORTAL_HTML = r"""<!doctype html>
         state.recognition = null;
         const endedWithError = state.voiceStatus === "Error";
         if (!endedWithError) setVoiceStatus("Idle", state.voiceStopping ? "Listening stopped. Review the transcript before sending." : "Speech recognition ended. Review the transcript before sending.");
+        if (state.voiceButtonId && $(state.voiceButtonId)) $(state.voiceButtonId).classList.remove("listening");
       };
       try { recognition.start(); } catch (e) { setVoiceStatus("Error", e.message || "Could not start speech recognition."); }
     }
@@ -1211,14 +1312,16 @@ PORTAL_HTML = r"""<!doctype html>
         }
       }, 5000);
     }
-    function clearVoiceTranscript() {
+    function clearVoiceTranscript(targetId = "tText") {
       state.voiceBaseTranscript = "";
       state.voiceFinalTranscript = "";
-      if ($("tText")) $("tText").value = "";
-      if ($("emailFrom")) $("emailFrom").value = "";
-      if ($("emailTo")) $("emailTo").value = "";
-      if ($("emailSubject")) $("emailSubject").value = "";
-      if ($("emailBody")) $("emailBody").value = "";
+      if ($(targetId)) $(targetId).value = "";
+      if (targetId === "tText") {
+        if ($("emailFrom")) $("emailFrom").value = "";
+        if ($("emailTo")) $("emailTo").value = "";
+        if ($("emailSubject")) $("emailSubject").value = "";
+        if ($("emailBody")) $("emailBody").value = "";
+      }
       setVoiceStatus("Idle", "Transcript cleared.");
     }
     function buildEmailIntakeContent() {
@@ -1399,17 +1502,17 @@ PORTAL_HTML = r"""<!doctype html>
       const submission = data?.submission || data?.result?.submission || {};
       const request = data?.request || data?.result?.request || {};
       const location = request.location || {};
-      $("tMetadata").innerHTML = `<div class="metadata-grid">
-          <div class="metadata-item"><label>Submitted by</label><input id="metadataSubmittedBy" value="${escapeAttr(submission.submitted_by || "")}"></div>
-          <div class="metadata-item"><label>Email</label><input id="metadataEmail" type="email" value="${escapeAttr(submission.submitted_email || "")}"></div>
-          <div class="metadata-item"><label>Phone</label><input id="metadataPhone" value="${escapeAttr(submission.submitted_phone || "")}"></div>
-          <div class="metadata-item"><label>Requested due</label><input type="date" id="metadataDue" value="${escapeAttr(request.requested_due || "")}"></div>
-          <div class="metadata-item"><label>Building</label><input id="metadataBuilding" value="${escapeAttr(location.building || "")}"></div>
-          <div class="metadata-item"><label>Room</label><input id="metadataRoom" value="${escapeAttr(location.room || "")}"></div>
-          <div class="metadata-item"><label>Method</label><div class="metadata-value">${submission.submitted_method ? escapeHtml(submission.submitted_method) : '<span class="muted">-</span>'}</div></div>
-          <div class="metadata-item"><label>Source phrase</label><div class="metadata-value">${request.requested_due_raw ? escapeHtml(request.requested_due_raw) : '<span class="muted">-</span>'}</div></div>
+      $("tMetadata").innerHTML = `<div class="metadata-review-grid">
+          <div class="metadata-review-card"><label>Submitted by</label><input id="metadataSubmittedBy" value="${escapeAttr(submission.submitted_by || "")}"></div>
+          <div class="metadata-review-card metadata-review-card-medium"><label>Email</label><input id="metadataEmail" type="email" value="${escapeAttr(submission.submitted_email || "")}"></div>
+          <div class="metadata-review-card metadata-review-card-small"><label>Phone</label><input id="metadataPhone" value="${escapeAttr(submission.submitted_phone || "")}"></div>
+          <div class="metadata-review-card"><label>Requested due</label><input type="date" id="metadataDue" value="${escapeAttr(request.requested_due || "")}"></div>
+          <div class="metadata-review-card metadata-review-card-small"><label>Building</label><input id="metadataBuilding" value="${escapeAttr(location.building || "")}"></div>
+          <div class="metadata-review-card metadata-review-card-small"><label>Room</label><input id="metadataRoom" value="${escapeAttr(location.room || "")}"></div>
+          <div class="metadata-review-card metadata-review-card-small"><label>Method</label><div class="metadata-review-value">${submission.submitted_method ? escapeHtml(submission.submitted_method) : '<span class="muted">-</span>'}</div></div>
+          <div class="metadata-review-card metadata-review-card-wide"><label>Source phrase</label><div class="metadata-review-value">${request.requested_due_raw ? escapeHtml(request.requested_due_raw) : '<span class="muted">-</span>'}</div></div>
         </div>
-        <div class="row" style="margin-top:10px"><button onclick="applyMetadataReview()">Apply</button><button class="secondary" onclick="resetMetadataReview()">Reset</button></div>`;
+        <div class="metadata-review-actions"><button onclick="applyMetadataReview()">Apply</button><button class="secondary" onclick="resetMetadataReview()">Reset</button></div>`;
     }
 
     function metadataReviewValue(id) {
@@ -3122,6 +3225,552 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       const trace = await api(`/api/admin/workflow-runs/${runId}`);
       state.lastWorkflowTrace = trace;
       $("logTraceDetail").innerHTML = renderWorkflowTrace(trace);
+    }
+    const CHAT_HISTORY_STORAGE_KEY = "cmmsApi.chatConsole.history.v1";
+    const CHAT_PREFERENCES_STORAGE_KEY = "cmmsApi.chatConsole.preferences.v1";
+    const CHAT_HISTORY_MAX_BYTES = 3_500_000;
+    const CHAT_HISTORY_MAX_SESSIONS = 12;
+    const CHAT_HISTORY_MAX_MESSAGES = 40;
+    const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+    const CHAT_IMAGE_SOURCE_MAX_BYTES = 12 * 1024 * 1024;
+    const CHAT_IMAGE_MAX_DIMENSION = 1280;
+    function newChatId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`; }
+    function newChatSession() {
+      const now = Date.now();
+      return { id: newChatId(), title: "New chat", messages: [], createdAt: now, updatedAt: now };
+    }
+    function readChatSessions() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(CHAT_HISTORY_STORAGE_KEY) || "[]");
+        return Array.isArray(parsed) && parsed.length ? parsed : [newChatSession()];
+      } catch {
+        return [newChatSession()];
+      }
+    }
+    function readChatPreferences() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(CHAT_PREFERENCES_STORAGE_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    function saveChatPreferences() {
+      const preferences = {
+        model: $("chatModelSelect")?.value || "",
+        responseNumPredict: $("chatResponseLengthSelect")?.value || "1024",
+        thinkingEnabled: Boolean($("chatThinkingToggle")?.checked),
+        systemPrompt: $("chatSystemPrompt")?.value || "",
+      };
+      localStorage.setItem(CHAT_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+      state.chatPreferences = preferences;
+    }
+    function applyChatPreferences() {
+      const preferences = state.chatPreferences || readChatPreferences();
+      if ($("chatModelSelect") && preferences.model) {
+        const option = [...$("chatModelSelect").options].find(item => item.value === preferences.model);
+        if (option) $("chatModelSelect").value = preferences.model;
+      }
+      if ($("chatResponseLengthSelect") && preferences.responseNumPredict) $("chatResponseLengthSelect").value = preferences.responseNumPredict;
+      if ($("chatThinkingToggle")) $("chatThinkingToggle").checked = Boolean(preferences.thinkingEnabled);
+      if ($("chatSystemPrompt") && preferences.systemPrompt) $("chatSystemPrompt").value = preferences.systemPrompt;
+      updateChatVisionNotice();
+    }
+    function bindChatPreferenceEvents() {
+      ["chatModelSelect", "chatResponseLengthSelect", "chatThinkingToggle"].forEach(id => $(id)?.addEventListener("change", saveChatPreferences));
+      $("chatSystemPrompt")?.addEventListener("input", saveChatPreferences);
+    }
+    function compactChatSessionsForStorage(sessions) {
+      const compacted = (sessions || []).slice(0, CHAT_HISTORY_MAX_SESSIONS).map(session => ({
+        ...session,
+        messages: (session.messages || []).slice(-CHAT_HISTORY_MAX_MESSAGES).map(message => ({ ...message })),
+      }));
+      let serialized = JSON.stringify(compacted);
+      while (serialized.length > CHAT_HISTORY_MAX_BYTES) {
+        const messageWithImage = compacted
+          .flatMap(session => session.messages || [])
+          .find(message => (message.images || []).length);
+        if (!messageWithImage) break;
+        messageWithImage.images = [];
+        serialized = JSON.stringify(compacted);
+      }
+      while (serialized.length > CHAT_HISTORY_MAX_BYTES && compacted.length > 1) {
+        compacted.pop();
+        serialized = JSON.stringify(compacted);
+      }
+      return compacted.length ? compacted : [newChatSession()];
+    }
+    function saveChatSessions() {
+      localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(compactChatSessionsForStorage(state.chatSessions || [])));
+    }
+    function currentChatSession() {
+      if (!state.chatSessions?.length) state.chatSessions = readChatSessions();
+      if (!state.currentChatId) state.currentChatId = state.chatSessions[0].id;
+      return state.chatSessions.find(session => session.id === state.currentChatId) || state.chatSessions[0];
+    }
+    function chatTitleFrom(text) {
+      const title = String(text || "").replace(/\s+/g, " ").trim();
+      return title ? title.slice(0, 48) : "New chat";
+    }
+    async function chatConsole() {
+      state.chatSessions = readChatSessions();
+      state.chatPreferences = readChatPreferences();
+      state.currentChatId = state.currentChatId || state.chatSessions[0].id;
+      pageShell("Chat Console", `
+        <div class="chat-console-shell">
+          <aside class="chat-history">
+            <div class="chat-history-header">
+              <button onclick="newChatConsoleSession()">+ New chat</button>
+              <div class="chat-sidebar-actions">
+                <button class="secondary" onclick="clearChatHistory()">Clear history</button>
+              </div>
+            </div>
+            <div id="chatHistoryList" class="chat-history-list"></div>
+          </aside>
+          <section class="chat-console-main">
+            <div class="chat-console-toolbar">
+              <div class="chat-console-title"><strong>Local model chat</strong><div class="muted" id="chatRuntimeLabel">Loading models...</div></div>
+              <div class="chat-console-toolbar-controls">
+                <select id="chatModelSelect" onchange="updateChatVisionNotice()"></select>
+                <select id="chatResponseLengthSelect" title="Response length">
+                  <option value="512">Medium</option>
+                  <option value="1024" selected>Long</option>
+                  <option value="2048">Very long</option>
+                  <option value="4096">Max</option>
+                </select>
+                <label class="thinking-toggle"><input id="chatThinkingToggle" type="checkbox"> Thinking</label>
+                <button class="secondary" onclick="downloadCurrentChatMarkdown()">Export MD</button>
+                <button class="secondary" onclick="downloadCurrentChatJson()">Export JSON</button>
+                <button class="secondary" onclick="clearCurrentChat()">Clear chat</button>
+              </div>
+            </div>
+            <details class="chat-system-prompt">
+              <summary>System Prompt</summary>
+              <textarea id="chatSystemPrompt" placeholder="Optional behavior instructions for this chat"></textarea>
+            </details>
+            <div id="chatMessages" class="chat-messages"></div>
+            <div id="chatError" class="muted"></div>
+            <div class="chat-composer">
+              <div class="chat-composer-shell" ondragover="handleChatDragOver(event)" ondragleave="handleChatDragLeave(event)" ondrop="handleChatDrop(event)">
+                <div class="chat-input-tools">
+                  <button class="chat-icon-button" onclick="startVoiceInput()" title="Voice input" aria-label="Voice input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg></button>
+                  <label class="chat-icon-button button-like" for="chatImageInput" title="Attach image" aria-label="Image input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M17 8 12 3 7 8"></path><path d="M12 3v12"></path></svg></label>
+                </div>
+                <textarea id="chatInput" placeholder="Message your local model" onpaste="handleChatPaste(event)"></textarea>
+                <div class="chat-action-slot">
+                  <button id="chatSendButton" class="chat-send-button" onclick="sendChatConsoleMessage()" aria-label="Send message" title="Send (Enter)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path></svg></button>
+                  <button id="chatStopButton" class="secondary chat-stop-button" onclick="stopChatConsoleGeneration()" aria-label="Stop generating" title="Stop generating (Esc)" hidden></button>
+                </div>
+                <input id="chatImageInput" type="file" accept="image/*" onchange="handleChatImageInput(event)" style="display:none">
+                <span id="chatVisionNotice" class="chat-attachment-note">Vision requires an Ollama vision model.</span>
+                <div id="chatImagePreview" class="chat-image-preview"></div>
+              </div>
+            </div>
+          </section>
+        </div>`, "", "Admin-only local model tester with browser-saved history.");
+      $("chatInput").addEventListener("keydown", handleChatInputKeydown);
+      $("chatImageInput").value = "";
+      state.chatPendingImage = null;
+      bindChatPreferenceEvents();
+      applyChatPreferences();
+      renderChatHistory();
+      renderChatMessages();
+      await loadChatModels();
+    }
+    async function loadChatModels() {
+      const data = await api("/api/admin/chat-test/models").catch(error => ({ error: error.message, models: [] }));
+      const select = $("chatModelSelect");
+      const models = data.models || [];
+      select.innerHTML = models.length
+        ? models.map(model => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.id)}</option>`).join("")
+        : `<option value="">No Ollama models found</option>`;
+      $("chatRuntimeLabel").textContent = data.error || (models.length ? `ollama / ${models[0].id}` : "Ollama unavailable");
+      applyChatPreferences();
+      updateChatVisionNotice();
+    }
+    function selectedModelLooksVisionCapable(modelName) {
+      return /(llava|vision|vl|qwen2\.?5[-_]?vl|minicpm|gemma3|bakllava|moondream)/i.test(modelName || "");
+    }
+    function updateChatVisionNotice() {
+      const notice = $("chatVisionNotice");
+      const select = $("chatModelSelect");
+      if (!notice || !select) return;
+      const modelName = select.value || "";
+      if (!modelName) {
+        notice.textContent = "Image understanding needs a vision-capable Ollama model.";
+        notice.classList.add("warning");
+      } else if (selectedModelLooksVisionCapable(modelName)) {
+        notice.textContent = "Selected model looks vision-capable.";
+        notice.classList.remove("warning");
+      } else {
+        notice.textContent = "Selected model may be text-only; image understanding needs a vision model.";
+        notice.classList.add("warning");
+      }
+    }
+    function renderChatHistory() {
+      const list = $("chatHistoryList");
+      if (!list) return;
+      const sessions = [...(state.chatSessions || [])].sort((a, b) => b.updatedAt - a.updatedAt);
+      list.innerHTML = sessions.map(session => `
+        <div class="chat-history-item ${session.id === state.currentChatId ? "active" : ""}">
+          <button onclick="selectChatSession('${session.id}')" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</button>
+          <button class="delete-chat" onclick="deleteChatSession('${session.id}')" title="Delete chat" aria-label="Delete chat">x</button>
+        </div>`).join("");
+    }
+    function renderChatMessages() {
+      const target = $("chatMessages");
+      if (!target) return;
+      const session = currentChatSession();
+      if (!session.messages.length) {
+        target.innerHTML = `<div class="chat-empty"><h2>Ask your local model</h2><p>Choose an Ollama model, toggle Thinking if needed, and send a test message.</p></div>`;
+        return;
+      }
+      target.innerHTML = session.messages.map((message, index) => {
+        const images = (message.images || []).map(image => `<img src="data:image/*;base64,${escapeAttr(image)}" alt="Attached image">`).join("");
+        return `<div class="chat-message-row ${message.role}">
+          <div class="chat-bubble ${message.role}">${escapeHtml(message.content)}${images ? `<div class="chat-image-strip">${images}</div>` : ""}</div>
+          <div class="chat-message-actions">
+            <button onclick="copyChatMessage(${index})" aria-label="Copy message" title="Copy message">Copy</button>
+            <button onclick="deleteChatMessage(${index})" aria-label="Delete message" title="Delete message">Delete</button>
+          </div>
+        </div>`;
+      }).join("");
+      target.scrollTop = target.scrollHeight;
+    }
+    async function copyChatMessage(index) {
+      const message = currentChatSession().messages[index];
+      if (!message) return;
+      await navigator.clipboard?.writeText(message.content || "");
+      $("chatError").textContent = "Message copied.";
+    }
+    function deleteChatMessage(index) {
+      const session = currentChatSession();
+      session.messages.splice(index, 1);
+      session.updatedAt = Date.now();
+      saveChatSessions();
+      renderChatMessages();
+    }
+    function selectChatSession(id) {
+      state.currentChatId = id;
+      renderChatHistory();
+      renderChatMessages();
+    }
+    function newChatConsoleSession() {
+      const session = newChatSession();
+      state.chatSessions = [session, ...(state.chatSessions || [])];
+      state.currentChatId = session.id;
+      saveChatSessions();
+      renderChatHistory();
+      renderChatMessages();
+      $("chatInput")?.focus();
+    }
+    function deleteChatSession(id) {
+      state.chatSessions = (state.chatSessions || []).filter(session => session.id !== id);
+      if (!state.chatSessions.length) state.chatSessions = [newChatSession()];
+      if (state.currentChatId === id) state.currentChatId = state.chatSessions[0].id;
+      saveChatSessions();
+      renderChatHistory();
+      renderChatMessages();
+    }
+    function clearChatHistory() {
+      state.chatSessions = [newChatSession()];
+      state.currentChatId = state.chatSessions[0].id;
+      saveChatSessions();
+      renderChatHistory();
+      renderChatMessages();
+    }
+    function clearCurrentChat() {
+      const session = currentChatSession();
+      session.title = "New chat";
+      session.messages = [];
+      session.updatedAt = Date.now();
+      saveChatSessions();
+      renderChatHistory();
+      renderChatMessages();
+    }
+    function downloadTextFile(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    function safeChatExportName(session, extension) {
+      const title = (session.title || "chat").replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "chat";
+      return `${title}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+    }
+    function chatMessagesMarkdown(session = currentChatSession()) {
+      return (session.messages || []).map(message => {
+        const imageNote = (message.images || []).length ? `\n\n_Attached images: ${message.images.length}_` : "";
+        return `## ${message.role}\n\n${message.content || ""}${imageNote}`;
+      }).join("\n\n");
+    }
+    function downloadCurrentChatMarkdown() {
+      const session = currentChatSession();
+      downloadTextFile(safeChatExportName(session, "md"), chatMessagesMarkdown(session), "text/markdown;charset=utf-8");
+    }
+    function downloadCurrentChatJson() {
+      const session = currentChatSession();
+      downloadTextFile(safeChatExportName(session, "json"), JSON.stringify(session, null, 2), "application/json;charset=utf-8");
+    }
+    function buildChatRequestMessages(session, assistantMessage = null) {
+      const messages = session.messages
+        .filter(message => message !== assistantMessage)
+        .slice(-40)
+        .map(message => ({ role: message.role, content: message.content }));
+      const systemPrompt = $("chatSystemPrompt")?.value.trim();
+      return systemPrompt ? [{ role: "system", content: systemPrompt }, ...messages] : messages;
+    }
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read image file."));
+        reader.readAsDataURL(file);
+      });
+    }
+    function dataUrlByteLength(dataUrl) {
+      const base64 = String(dataUrl || "").split(",")[1] || "";
+      return Math.ceil(base64.length * 3 / 4);
+    }
+    async function compressChatImage(file) {
+      const originalDataUrl = await readFileAsDataUrl(file);
+      if (/image\/svg\+xml/i.test(file.type)) return originalDataUrl;
+      const image = new Image();
+      const imageUrl = URL.createObjectURL(file);
+      try {
+        await new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = () => reject(new Error("Could not load image for compression."));
+          image.src = imageUrl;
+        });
+        const scale = Math.min(1, CHAT_IMAGE_MAX_DIMENSION / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+        const width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
+        const height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        return dataUrlByteLength(compressedDataUrl) < dataUrlByteLength(originalDataUrl) ? compressedDataUrl : originalDataUrl;
+      } finally {
+        URL.revokeObjectURL(imageUrl);
+      }
+    }
+    function renderChatImagePreview(image) {
+      $("chatImagePreview").innerHTML = `<img src="${escapeAttr(image.dataUrl)}" alt=""><span>${escapeHtml(image.name)}</span><button class="secondary" onclick="clearChatImage()">Remove</button>`;
+    }
+    async function prepareChatImageFile(file) {
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        clearChatImage();
+        $("chatError").textContent = "Please choose an image file.";
+        return;
+      }
+      if (file.size > CHAT_IMAGE_SOURCE_MAX_BYTES) {
+        clearChatImage();
+        $("chatError").textContent = "Image source is limited to 12 MB before compression.";
+        return;
+      }
+      try {
+        $("chatError").textContent = "Preparing image...";
+        const dataUrl = await compressChatImage(file);
+        if (dataUrlByteLength(dataUrl) > CHAT_IMAGE_MAX_BYTES) {
+          clearChatImage();
+          $("chatError").textContent = "Image input is limited to 5 MB.";
+          return;
+        }
+        const base64 = dataUrl.split(",")[1] || "";
+        state.chatPendingImage = { name: file.name, base64, dataUrl };
+        renderChatImagePreview(state.chatPendingImage);
+        $("chatError").textContent = "";
+      } catch (error) {
+        clearChatImage();
+        $("chatError").textContent = error.message || "Could not prepare image.";
+      }
+    }
+    async function handleChatImageInput(event) {
+      const file = event.target.files?.[0];
+      await prepareChatImageFile(file);
+    }
+    function handleChatDragOver(event) {
+      event.preventDefault();
+      event.currentTarget.classList.add("drag-over");
+    }
+    function handleChatDragLeave(event) {
+      event.currentTarget.classList.remove("drag-over");
+    }
+    async function handleChatDrop(event) {
+      event.preventDefault();
+      event.currentTarget.classList.remove("drag-over");
+      const file = [...(event.dataTransfer?.files || [])].find(item => item.type?.startsWith("image/"));
+      await prepareChatImageFile(file);
+    }
+    async function handleChatPaste(event) {
+      const file = [...(event.clipboardData?.files || [])].find(item => item.type?.startsWith("image/"));
+      if (!file) return;
+      event.preventDefault();
+      await prepareChatImageFile(file);
+    }
+    function clearChatImage() {
+      state.chatPendingImage = null;
+      $("chatImageInput").value = "";
+      $("chatImagePreview").innerHTML = "";
+    }
+    function startVoiceInput() {
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Recognition) {
+        $("chatError").textContent = "SpeechRecognition is not available in this browser. Try Chrome or Edge.";
+        return;
+      }
+      const recognition = new Recognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      $("chatError").textContent = "Listening...";
+      recognition.onresult = event => {
+        const transcript = event.results?.[0]?.[0]?.transcript || "";
+        $("chatInput").value = `${$("chatInput").value} ${transcript}`.trim();
+        $("chatError").textContent = "";
+        $("chatInput").focus();
+      };
+      recognition.onerror = event => {
+        $("chatError").textContent = `Voice input failed: ${event.error || "unknown error"}`;
+      };
+      recognition.onend = () => {
+        if ($("chatError").textContent === "Listening...") $("chatError").textContent = "";
+      };
+      recognition.start();
+    }
+    function handleChatInputKeydown(event) {
+      if (event.repeat || event.isComposing) return;
+      if (event.key === "Escape" && state.chatIsGenerating) {
+        event.preventDefault();
+        stopChatConsoleGeneration();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        if (state.chatIsGenerating) {
+          stopChatConsoleGeneration();
+        } else {
+          sendChatConsoleMessage();
+        }
+      }
+    }
+    function setChatGenerating(isGenerating) {
+      state.chatIsGenerating = isGenerating;
+      if ($("chatSendButton")) $("chatSendButton").hidden = isGenerating;
+      if ($("chatStopButton")) $("chatStopButton").hidden = !isGenerating;
+    }
+    function stopChatConsoleGeneration() {
+      state.chatAbortController?.abort();
+    }
+    function appendChatAssistantDelta(message, delta) {
+      message.content = `${message.content || ""}${delta || ""}`;
+      renderChatMessages();
+    }
+    function appendChatAssistantContent(message, content) {
+      if (!content) return;
+      if (message.content && content.startsWith(message.content)) {
+        message.content = content;
+      } else {
+        appendChatAssistantDelta(message, content);
+      }
+      renderChatMessages();
+    }
+    function chatStreamDeltaFromChunk(chunk) {
+      return ((chunk.message || {}).content || chunk.response || "");
+    }
+    function processChatStreamLine(line, assistantMessage) {
+      if (!line.trim()) return false;
+      const chunk = JSON.parse(line);
+      if (chunk.error) throw new Error(chunk.error);
+      appendChatAssistantContent(assistantMessage, chatStreamDeltaFromChunk(chunk));
+      return Boolean(chunk.done);
+    }
+    async function sendChatConsoleMessage() {
+      if (state.chatSendInFlight) return;
+      state.chatSendInFlight = true;
+      const input = $("chatInput");
+      const text = input.value.trim();
+      const pendingImage = state.chatPendingImage;
+      if (!text && !pendingImage) {
+        state.chatSendInFlight = false;
+        return;
+      }
+      const model = $("chatModelSelect").value;
+      saveChatPreferences();
+      const session = currentChatSession();
+      const userMessage = { role: "user", content: text || "Please analyze this image.", images: pendingImage ? [pendingImage.base64] : [] };
+      session.messages.push(userMessage);
+      if (session.title === "New chat") session.title = chatTitleFrom(text || pendingImage?.name || "Image input");
+      session.updatedAt = Date.now();
+      input.value = "";
+      clearChatImage();
+      $("chatError").textContent = "";
+      saveChatSessions();
+      renderChatHistory();
+      renderChatMessages();
+      const assistantMessage = { role: "assistant", content: "" };
+      session.messages.push(assistantMessage);
+      renderChatMessages();
+      const controller = new AbortController();
+      state.chatAbortController = controller;
+      setChatGenerating(true);
+      try {
+        const response = await fetch("/api/admin/chat-test/message/stream", {
+          method: "POST",
+          credentials: "same-origin",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            thinking_enabled: $("chatThinkingToggle").checked,
+            response_num_predict: Number($("chatResponseLengthSelect")?.value || 1024),
+            images: userMessage.images || [],
+            messages: buildChatRequestMessages(session, assistantMessage),
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text() || "Chat request failed");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            processChatStreamLine(line, assistantMessage);
+          }
+          if (done) break;
+        }
+        if (buffer.trim()) processChatStreamLine(buffer, assistantMessage);
+        if (!assistantMessage.content.trim()) throw new Error("Ollama returned an empty response");
+        session.updatedAt = Date.now();
+        $("chatRuntimeLabel").textContent = `ollama / ${model}`;
+        saveChatSessions();
+        renderChatHistory();
+        renderChatMessages();
+      } catch (error) {
+        if (error.name === "AbortError") {
+          if (!assistantMessage.content.trim()) session.messages = session.messages.filter(message => message !== assistantMessage);
+          $("chatError").textContent = "Generation stopped.";
+        } else {
+          session.messages = session.messages.filter(message => message !== assistantMessage || assistantMessage.content.trim());
+          $("chatError").textContent = error.message || "Chat request failed";
+        }
+        saveChatSessions();
+        renderChatMessages();
+      } finally {
+        state.chatAbortController = null;
+        state.chatSendInFlight = false;
+        setChatGenerating(false);
+        input.focus();
+      }
     }
     async function reports() { const data = await api("/api/admin/reports/usage"); pageShell("Reports", `<div class="card"><h2>Usage</h2><div class="card-body">${table(data, ["endpoint","status_code","key_name","environment_code","calls","avg_duration_ms"])}</div></div>`); }
     async function kb() { const data = await api("/api/kb/status"); pageShell("Knowledge Base", `<div class="card"><h2>Future KB interface</h2><div class="card-body"><pre>${JSON.stringify(data, null, 2)}</pre></div></div>`); }

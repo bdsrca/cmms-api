@@ -10,7 +10,8 @@ from .schema import validate_chat_record
 
 
 SYSTEM_PROMPT = (
-    "Extract CMMS work request fields. Return strict JSON only. "
+    "Extract CMMS work request fields for a college/campus facilities environment. "
+    "Return strict JSON only. "
     "Never claim a work order was created."
 )
 

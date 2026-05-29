@@ -28,9 +28,12 @@ data/
 data/*
 !data/cmms_field_extractor/
 data/cmms_field_extractor/*.jsonl
+data/cmms_field_extractor/*.json
 data/cmms_field_extractor/raw/
 data/cmms_field_extractor/prepared/
 models/cmms_field_extractor/
+unsloth_compiled_cache/
+tools/llama.cpp/
 *.gguf
 *.safetensors
 !data/cmms_field_extractor/.gitkeep

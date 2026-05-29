@@ -34,6 +34,17 @@ class OrchestrationMenuUiTests(unittest.TestCase):
         self.assertIn('workflow_mode: $("oWorkflowMode").value', html)
         self.assertIn('if (ep === "cmms-intake") body.workflow_mode = $("tWorkflowMode").value;', html)
 
+    def test_orchestration_supports_voice_and_requester_rich_example(self) -> None:
+        html = (ROOT / "app" / "ui.py").read_text(encoding="utf-8")
+        orchestration_page = html.split("function orchestration()", 1)[1].split("async function runOrchestration()", 1)[0]
+
+        self.assertIn('id="oVoiceStartBtn"', orchestration_page)
+        self.assertIn("startVoiceRecognition('oText', 'oVoiceStartBtn')", orchestration_page)
+        self.assertIn("clearVoiceTranscript('oText')", orchestration_page)
+        self.assertIn("requested by Maria Chen", html)
+        self.assertIn("maria.chen@example.com", html)
+        self.assertIn("416-555-0188", html)
+
     def test_environment_default_workflow_mode_switch_is_exposed_and_synced(self) -> None:
         html = (ROOT / "app" / "ui.py").read_text(encoding="utf-8")
 

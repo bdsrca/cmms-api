@@ -26,10 +26,15 @@ from .code_normalizer import (
 from .cmms_connectors import auto_push_cmms_payload
 from .config import (
     ADVISORY_WARNING,
+    AI_FAST_MODE_ENABLED,
     ALLOWED_REQUEST_TYPES,
+    CLASSIFIER_MODEL_NAME,
+    DRAFT_MODEL_NAME,
     EXTRACTOR_MODEL_NAME,
     MODEL_NAME,
+    OLLAMA_JSON_FORMAT_ENABLED,
     OLLAMA_CHAT_URL,
+    SAFETY_REVIEWER_ENABLED,
 )
 from .db import db_execute
 from .environments import default_workflow_mode, get_environment_values
@@ -227,6 +232,8 @@ def build_cmms_intake_push_result(
 
 
 def workflow_mode_for_payload(payload: Any) -> str:
+    if AI_FAST_MODE_ENABLED:
+        return "fast"
     explicit_mode = getattr(payload, "workflow_mode", None)
     if explicit_mode in {"fast", "full"}:
         return str(explicit_mode)
@@ -240,6 +247,7 @@ def fast_mode_reviewer_block() -> dict[str, Any]:
         "human_review_recommended": False,
         "risk_flags": [],
         "notes": ["LLM safety reviewer skipped in fast mode. Use full mode before live CMMS write-back."],
+        "reviewer_skipped": True,
         "source": "fast_mode_deterministic_review",
         "message": "Fast mode skipped the LLM safety reviewer; dry-run planning can continue.",
     }
@@ -338,8 +346,12 @@ async def call_ollama(
     timeout: int = 120,
     temperature: float | None = None,
     model: str = MODEL_NAME,
+    response_format: str | None = None,
 ) -> str:
     payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+    resolved_response_format = ollama_response_format(response_format)
+    if resolved_response_format is not None:
+        payload["format"] = resolved_response_format
     if temperature is not None:
         payload["options"] = {"temperature": temperature}
     try:
@@ -364,6 +376,26 @@ async def call_ollama(
 
 def extractor_model_name() -> str:
     return EXTRACTOR_MODEL_NAME
+
+
+def classifier_model_name() -> str:
+    return CLASSIFIER_MODEL_NAME
+
+
+def draft_model_name() -> str:
+    return DRAFT_MODEL_NAME
+
+
+def ollama_response_format(response_format: str | None) -> str | None:
+    if not OLLAMA_JSON_FORMAT_ENABLED:
+        return None
+    return response_format
+
+
+def disabled_reviewer_block() -> dict[str, Any]:
+    review = skipped_reviewer_block("LLM safety reviewer disabled by SAFETY_REVIEWER_ENABLED=false.")
+    review["reviewer_skipped"] = True
+    return review
 
 
 def resolve_validation_lists(request: Any) -> tuple[list[str], list[str], str | None]:
@@ -517,7 +549,11 @@ async def summarize_work_order(payload: Any, call_ollama_func: OllamaCaller = ca
 
 async def cmms_assistant(payload: Any, call_ollama_func: OllamaCaller = call_ollama) -> dict[str, Any]:
     messages, prompt_meta = prompt_messages("cmms-assistant", {"text": payload.text})
-    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=extractor_model_name())
+    content = await call_ollama_func(
+        messages,
+        temperature=prompt_meta["temperature"],
+        model=prompt_meta["model"],
+    )
     return {
         "mode": "cmms-assistant",
         "response": content,
@@ -542,7 +578,12 @@ async def extract_work_order_fields(payload: Any, call_ollama_func: OllamaCaller
             "valid_priorities": valid_priorities,
         },
     )
-    content = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=extractor_model_name())
+    content = await call_ollama_func(
+        messages,
+        temperature=prompt_meta["temperature"],
+        model=extractor_model_name(),
+        response_format="json",
+    )
     data = parse_json_response(content)
     result = validate_extracted_fields(data, valid_buildings, valid_priorities)
     return result | {"_environment_code": env_code}
@@ -695,7 +736,13 @@ async def cmms_intake(
                 "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
                 (prompt_meta["model"], f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}", current_step),
             )
-            classifier_data = parse_json_response(await call_ollama_func(intake_messages["classifier"], temperature=prompt_meta["temperature"], model=prompt_meta["model"]))
+            classifier_data = parse_json_response(
+                await call_ollama_func(
+                    intake_messages["classifier"],
+                    temperature=prompt_meta["temperature"],
+                    model=classifier_model_name(),
+                )
+            )
             extractor_data = parse_json_response(
                 await call_ollama_func(
                     intake_messages["field_extractor"],
@@ -1058,7 +1105,7 @@ async def cmms_intake(
             run_id,
             "draft_generation",
             43,
-            model=None if workflow_mode == "fast" else prompt_meta["model"],
+            model=None if workflow_mode == "fast" else draft_model_name(),
             prompt_version=None if workflow_mode == "fast" else f"{prompt_meta['prompt_id']}:{prompt_meta['prompt_version']}",
             input_summary=f"validation_valid={ai_validation.get('valid')}",
         )
@@ -1095,7 +1142,7 @@ async def cmms_intake(
                 {"role": "user", "content": json.dumps(draft_context)},
             ]
             draft_data = parse_json_response(
-                await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+                await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=draft_model_name())
             )
             drafts = {
                 "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
@@ -1124,6 +1171,18 @@ async def cmms_intake(
                 "skipped",
                 output_summary=review["message"],
                 output_json={"status": review["status"], "enabled": review["enabled"], "source": review["source"]},
+            )
+        elif not SAFETY_REVIEWER_ENABLED:
+            review = disabled_reviewer_block()
+            finish_workflow_step(
+                current_step,
+                "skipped",
+                output_summary=review["message"],
+                output_json={
+                    "status": review["status"],
+                    "enabled": review["enabled"],
+                    "reviewer_skipped": review["reviewer_skipped"],
+                },
             )
         elif contract_validation["valid"]:
             review, reviewer_prompt_meta = await run_safety_reviewer_agent(

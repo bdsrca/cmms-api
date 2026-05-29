@@ -1,0 +1,126 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: CMMS LLM Management Portal
+    - generic [ref=e5]:
+      - generic [ref=e6]: Local API online
+      - generic [ref=e7]: admin (admin)
+      - button "Logout" [ref=e8] [cursor=pointer]
+  - navigation [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Operate
+      - button "▦ Dashboard" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]: ▦
+        - generic [ref=e14]: Dashboard
+      - button "O Orchestration" [ref=e15] [cursor=pointer]:
+        - generic [ref=e16]: O
+        - generic [ref=e17]: Orchestration
+      - button "▶ Test Console" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: ▶
+        - generic [ref=e20]: Test Console
+      - button "✉ Email Intake" [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: ✉
+        - generic [ref=e23]: Email Intake
+      - button "⌘ API Builder" [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]: ⌘
+        - generic [ref=e26]: API Builder
+    - generic [ref=e27]:
+      - generic [ref=e28]: Configure
+      - button "◇ Environments Admin" [ref=e29] [cursor=pointer]:
+        - generic [ref=e30]: ◇
+        - generic [ref=e31]: Environments
+        - generic [ref=e32]: Admin
+      - button "▣ Output Contracts Admin" [ref=e33] [cursor=pointer]:
+        - generic [ref=e34]: ▣
+        - generic [ref=e35]: Output Contracts
+        - generic [ref=e36]: Admin
+      - button "✎ Prompt Versions Admin" [ref=e37] [cursor=pointer]:
+        - generic [ref=e38]: ✎
+        - generic [ref=e39]: Prompt Versions
+        - generic [ref=e40]: Admin
+      - button "◆ API Keys Admin" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: ◆
+        - generic [ref=e43]: API Keys
+        - generic [ref=e44]: Admin
+    - generic [ref=e45]:
+      - generic [ref=e46]: Quality
+      - button "✓ Test Cases Admin" [ref=e47] [cursor=pointer]:
+        - generic [ref=e48]: ✓
+        - generic [ref=e49]: Test Cases
+        - generic [ref=e50]: Admin
+      - button "✓ Test Suites Admin" [ref=e51] [cursor=pointer]:
+        - generic [ref=e52]: ✓
+        - generic [ref=e53]: Test Suites
+        - generic [ref=e54]: Admin
+      - button "☰ Logs" [ref=e55] [cursor=pointer]:
+        - generic [ref=e56]: ☰
+        - generic [ref=e57]: Logs
+      - button "↗ Reports" [ref=e58] [cursor=pointer]:
+        - generic [ref=e59]: ↗
+        - generic [ref=e60]: Reports
+      - button "◌ Knowledge Base" [ref=e61] [cursor=pointer]:
+        - generic [ref=e62]: ◌
+        - generic [ref=e63]: Knowledge Base
+    - generic [ref=e64]:
+      - generic [ref=e65]: Admin
+      - button "◉ Users Admin" [ref=e66] [cursor=pointer]:
+        - generic [ref=e67]: ◉
+        - generic [ref=e68]: Users
+        - generic [ref=e69]: Admin
+      - button "💬 Chat Console Admin" [ref=e70] [cursor=pointer]:
+        - generic [ref=e71]: 💬
+        - generic [ref=e72]: Chat Console
+        - generic [ref=e73]: Admin
+      - button "⇄ Remote Access Admin" [ref=e74] [cursor=pointer]:
+        - generic [ref=e75]: ⇄
+        - generic [ref=e76]: Remote Access
+        - generic [ref=e77]: Admin
+      - button "⚙ System Admin" [ref=e78] [cursor=pointer]:
+        - generic [ref=e79]: ⚙
+        - generic [ref=e80]: System
+        - generic [ref=e81]: Admin
+      - button "S Setup Wizard Admin" [ref=e82] [cursor=pointer]:
+        - generic [ref=e83]: S
+        - generic [ref=e84]: Setup Wizard
+        - generic [ref=e85]: Admin
+  - main [ref=e86]:
+    - generic [ref=e88]:
+      - heading "Chat Console" [level=1] [ref=e89]
+      - generic [ref=e90]: Admin-only local model tester with browser-saved history.
+    - generic [ref=e92]:
+      - complementary [ref=e93]:
+        - generic [ref=e94]:
+          - button "+ New chat" [ref=e95] [cursor=pointer]
+          - button "Clear history" [ref=e97] [cursor=pointer]
+        - generic [ref=e99]:
+          - button "New chat" [ref=e100] [cursor=pointer]
+          - button "Delete chat" [ref=e101] [cursor=pointer]: x
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - strong [ref=e105]: Local model chat
+            - generic [ref=e106]: ollama / cmms-field-extractor-phi4-pilot:latest
+          - generic [ref=e107]:
+            - combobox [active] [ref=e108]:
+              - option "cmms-field-extractor-phi4-pilot:latest" [selected]
+              - option "nexusriot/Qwen3.5-Uncensored-HauhauCS-Aggressive:9b"
+              - option "phi4-mini:latest"
+            - generic [ref=e109]:
+              - checkbox "Thinking" [ref=e110]
+              - text: Thinking
+            - button "Clear chat" [ref=e111] [cursor=pointer]
+        - generic [ref=e113]:
+          - heading "Ask your local model" [level=2] [ref=e114]
+          - paragraph [ref=e115]: Choose an Ollama model, toggle Thinking if needed, and send a test message.
+        - generic [ref=e117]:
+          - generic [ref=e118]:
+            - button "Voice input" [ref=e119] [cursor=pointer]:
+              - img [ref=e120]
+            - generic "Image input" [ref=e123]:
+              - img [ref=e124]
+          - textbox "Message your local model" [ref=e127]
+          - button "Send message" [ref=e128] [cursor=pointer]:
+            - img [ref=e129]
+          - generic [ref=e131]: Selected model may be text-only; image understanding needs a vision model.
+          - generic [ref=e132]:
+            - generic [ref=e133]: chat-console-redesign-final.png
+            - button "Remove" [ref=e134] [cursor=pointer]

@@ -4,18 +4,79 @@ import json
 import os
 
 
-def model_name_from_env(environ: dict[str, str] | None = None) -> str:
+FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+
+
+def bool_from_env(name: str, default: bool, environ: dict[str, str] | None = None) -> bool:
     values = os.environ if environ is None else environ
-    return values.get("OLLAMA_MODEL", "qwen3:8b")
+    raw_value = values.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() not in FALSE_ENV_VALUES
+
+
+def text_from_env(name: str, default: str, environ: dict[str, str] | None = None) -> str:
+    values = os.environ if environ is None else environ
+    value = values.get(name)
+    return value.strip() if isinstance(value, str) and value.strip() else default
+
+
+def model_name_from_env(environ: dict[str, str] | None = None) -> str:
+    return text_from_env("OLLAMA_MODEL", "qwen3:8b", environ)
+
+
+def extractor_model_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("EXTRACTOR_MODEL_ENABLED", True, environ)
 
 
 def extractor_model_name_from_env(environ: dict[str, str] | None = None) -> str:
     values = os.environ if environ is None else environ
-    return values.get("EXTRACTOR_MODEL_NAME", model_name_from_env(values))
+    if not extractor_model_enabled_from_env(values):
+        return model_name_from_env(values)
+    return text_from_env("EXTRACTOR_MODEL_NAME", model_name_from_env(values), values)
+
+
+def classifier_model_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("CLASSIFIER_MODEL_ENABLED", True, environ)
+
+
+def classifier_model_name_from_env(environ: dict[str, str] | None = None) -> str:
+    values = os.environ if environ is None else environ
+    if not classifier_model_enabled_from_env(values):
+        return model_name_from_env(values)
+    return text_from_env("CLASSIFIER_MODEL_NAME", model_name_from_env(values), values)
+
+
+def draft_model_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("DRAFT_MODEL_ENABLED", True, environ)
+
+
+def draft_model_name_from_env(environ: dict[str, str] | None = None) -> str:
+    values = os.environ if environ is None else environ
+    if not draft_model_enabled_from_env(values):
+        return model_name_from_env(values)
+    return text_from_env("DRAFT_MODEL_NAME", model_name_from_env(values), values)
+
+
+def safety_reviewer_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("SAFETY_REVIEWER_ENABLED", True, environ)
+
+
+def ai_fast_mode_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("AI_FAST_MODE_ENABLED", False, environ)
+
+
+def ollama_json_format_enabled_from_env(environ: dict[str, str] | None = None) -> bool:
+    return bool_from_env("OLLAMA_JSON_FORMAT_ENABLED", True, environ)
 
 
 MODEL_NAME = model_name_from_env()
 EXTRACTOR_MODEL_NAME = extractor_model_name_from_env()
+CLASSIFIER_MODEL_NAME = classifier_model_name_from_env()
+DRAFT_MODEL_NAME = draft_model_name_from_env()
+SAFETY_REVIEWER_ENABLED = safety_reviewer_enabled_from_env()
+AI_FAST_MODE_ENABLED = ai_fast_mode_enabled_from_env()
+OLLAMA_JSON_FORMAT_ENABLED = ollama_json_format_enabled_from_env()
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 SERVICE_NAME = "local-cmms-llm-api"
 ADVISORY_WARNING = "Advisory mode only. No CMMS write-back was performed."
@@ -125,7 +186,8 @@ DEFAULT_PROMPT_VERSIONS = {
         "temperature": 0.1,
         "system_prompt": (
             "/no_think\n"
-            "Extract CMMS fields from the request. Return JSON only with this shape: "
+            "Extract CMMS fields from a college/campus facilities request. "
+            "Return JSON only with this shape: "
             "{\"request_type\":\"HVAC\",\"building\":\"ARC\",\"room\":\"205\",\"priority\":\"NORMAL\","
             "\"summary\":\"Air conditioner in ARC room 205 is making loud noise.\","
             "\"missing_fields\":[],\"needs_human_review\":false,\"confidence\":0.85}. "
@@ -154,7 +216,8 @@ DEFAULT_PROMPT_VERSIONS = {
                 ),
                 "field_extractor": (
                     "/no_think\n"
-                    "Extract CMMS intake fields. Return JSON only with this shape: "
+                    "Extract CMMS intake fields from a college/campus facilities request. "
+                    "Return JSON only with this shape: "
                     "{\"building\":\"ARC\",\"room\":\"205\",\"priority\":\"NORMAL\","
                     "\"summary\":\"Air conditioner in ARC room 205 is making loud noise.\"}. "
                     "Valid buildings: {{valid_buildings}}. Valid priorities: {{valid_priorities}}. "

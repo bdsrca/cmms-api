@@ -1,6 +1,12 @@
 import unittest
 
 from training.cmms_field_extractor.evaluate import evaluate_predictions
+from training.cmms_field_extractor.run_ollama_eval import (
+    DEFAULT_SYSTEM_PROMPT,
+    build_eval_example,
+    build_ollama_chat_payload,
+    prompt_messages_from_record,
+)
 
 
 EXPECTED = {
@@ -40,6 +46,16 @@ class CmmsFieldExtractorEvalTests(unittest.TestCase):
         self.assertEqual(report["json_parse_success_rate"], 1.0)
         self.assertEqual(report["contract_valid_rate"], 1.0)
         self.assertEqual(report["required_field_accuracy"], 1.0)
+        self.assertEqual(
+            report["per_field_accuracy"],
+            {
+                "building": 1.0,
+                "priority": 1.0,
+                "request_type": 1.0,
+                "room": 1.0,
+                "summary": 1.0,
+            },
+        )
         self.assertEqual(report["priority_accuracy"], 1.0)
         self.assertEqual(report["unsafe_claim_count"], 0)
         self.assertEqual(report["failures"], [])
@@ -81,3 +97,71 @@ class CmmsFieldExtractorEvalTests(unittest.TestCase):
             {"id": "wrong-priority", "category": "unsafe_claim"},
             report["failures"],
         )
+
+
+class CmmsFieldExtractorOllamaEvalRunnerTests(unittest.TestCase):
+    def test_default_eval_prompt_includes_college_context(self) -> None:
+        prompt = DEFAULT_SYSTEM_PROMPT.lower()
+
+        self.assertIn("college", prompt)
+        self.assertIn("campus", prompt)
+
+    def test_prompt_messages_excludes_expected_assistant_payload(self) -> None:
+        record = {
+            "messages": [
+                {"role": "system", "content": "Extract fields."},
+                {"role": "user", "content": "Leak in A101"},
+                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+            ]
+        }
+
+        self.assertEqual(
+            prompt_messages_from_record(record),
+            [
+                {"role": "system", "content": "Extract fields."},
+                {"role": "user", "content": "Leak in A101"},
+            ],
+        )
+
+    def test_prompt_messages_can_replace_system_prompt_with_strict_schema(self) -> None:
+        record = {
+            "messages": [
+                {"role": "system", "content": "Loose prompt."},
+                {"role": "user", "content": "Leak in A101"},
+                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+            ]
+        }
+
+        self.assertEqual(
+            prompt_messages_from_record(record, system_prompt="Strict schema."),
+            [
+                {"role": "system", "content": "Strict schema."},
+                {"role": "user", "content": "Leak in A101"},
+            ],
+        )
+
+    def test_build_eval_example_uses_assistant_payload_as_expected(self) -> None:
+        record = {
+            "messages": [
+                {"role": "system", "content": "Extract fields."},
+                {"role": "user", "content": "Leak in A101"},
+                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+            ]
+        }
+
+        example = build_eval_example(record, example_id="sample-1", prediction="{}")
+
+        self.assertEqual(example["id"], "sample-1")
+        self.assertEqual(example["expected"], {"building": "A", "room": "101"})
+        self.assertEqual(example["prediction"], "{}")
+
+    def test_build_ollama_chat_payload_requests_json_and_temperature_zero(self) -> None:
+        payload = build_ollama_chat_payload(
+            model="phi4-mini:latest",
+            messages=[{"role": "user", "content": "Leak in A101"}],
+        )
+
+        self.assertEqual(payload["model"], "phi4-mini:latest")
+        self.assertEqual(payload["format"], "json")
+        self.assertFalse(payload["stream"])
+        self.assertEqual(payload["options"]["temperature"], 0)

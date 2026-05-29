@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import unittest
 
 from training.cmms_field_extractor.schema import (
@@ -189,6 +190,8 @@ class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
         self.assertEqual(validate_chat_record(record), [])
         self.assertEqual(record["messages"][0]["role"], "system")
         self.assertIn("Return strict JSON only", record["messages"][0]["content"])
+        self.assertIn("college", record["messages"][0]["content"].lower())
+        self.assertIn("campus", record["messages"][0]["content"].lower())
 
 
 class CmmsFieldExtractorSplitTests(unittest.TestCase):
@@ -215,6 +218,60 @@ class CmmsFieldExtractorTrainingScriptTests(unittest.TestCase):
         self.assertTrue(callable(train_unsloth.main))
         self.assertIn("data_path", train_unsloth.parse_args(["--data-path", "train.jsonl"]).__dict__)
 
+    def test_training_script_defaults_are_8gb_gpu_friendly(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        args = train_unsloth.parse_args(["--data-path", "train.jsonl"])
+
+        self.assertEqual(args.base_model, "unsloth/Qwen3-8B-unsloth-bnb-4bit")
+        self.assertEqual(args.max_seq_length, 1024)
+        self.assertEqual(args.per_device_train_batch_size, 1)
+        self.assertIsNone(args.dataset_num_proc)
+        self.assertEqual(args.max_steps, -1)
+        self.assertFalse(args.return_logits)
+        self.assertFalse(args.disable_unsloth_compile)
+        self.assertEqual(args.min_fused_loss_gb, 0.05)
+
+    def test_training_script_can_disable_unsloth_fused_loss(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        args = train_unsloth.parse_args(["--data-path", "train.jsonl", "--return-logits"])
+
+        self.assertTrue(args.return_logits)
+
+    def test_training_script_can_disable_unsloth_compile(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        previous = {
+            "UNSLOTH_COMPILE_DISABLE": os.environ.get("UNSLOTH_COMPILE_DISABLE"),
+            "TORCHDYNAMO_DISABLE": os.environ.get("TORCHDYNAMO_DISABLE"),
+        }
+        try:
+            args = train_unsloth.parse_args(["--data-path", "train.jsonl", "--disable-unsloth-compile"])
+            train_unsloth.configure_unsloth_compile(args.disable_unsloth_compile)
+
+            self.assertTrue(args.disable_unsloth_compile)
+            self.assertEqual(os.environ["UNSLOTH_COMPILE_DISABLE"], "1")
+            self.assertEqual(os.environ["TORCHDYNAMO_DISABLE"], "1")
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_training_script_clamps_fused_loss_target_memory(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        free_bytes = int(0.01 * 1024 * 1024 * 1024)
+
+        self.assertEqual(train_unsloth.fused_loss_target_gb(free_bytes, 0.05), 0.05)
+
+    def test_training_script_skips_unsloth_multiprocess_dataset_prepare(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        self.assertEqual(train_unsloth.sft_dataset_kwargs(), {"skip_prepare_dataset": True})
+
 
 class CmmsFieldExtractorTrainingDocsTests(unittest.TestCase):
     def test_modelfile_example_names_base_and_adapter(self) -> None:
@@ -223,14 +280,14 @@ class CmmsFieldExtractorTrainingDocsTests(unittest.TestCase):
 
         self.assertIn("FROM", text)
         self.assertIn("ADAPTER", text)
-        self.assertIn("cmms-field-extractor-qwen3-8b-lora-v1", text)
+        self.assertIn("college-cmms-field-extractor-phi4-v1", text)
 
     def test_training_runbook_covers_eval_ollama_and_rollback(self) -> None:
         doc = ROOT / "docs" / "cmms-field-extractor-training.md"
         text = doc.read_text(encoding="utf-8")
 
         self.assertIn("python -m unittest", text)
-        self.assertIn("ollama create cmms-field-extractor-qwen3-8b-lora-v1", text)
+        self.assertIn("ollama create college-cmms-field-extractor-phi4-v1", text)
         self.assertIn("EXTRACTOR_MODEL_NAME", text)
         self.assertIn("rollback", text.lower())
         self.assertIn("locked test", text.lower())

@@ -1,0 +1,11 @@
+# Ollama Modelfile for the CMMS field extractor Phi4 pilot model.
+# This pilot uses the 50-step local LoRA adapter merged into GGUF for smoke testing only.
+
+FROM C:/li/ai-api/models/cmms_field_extractor/cmms-field-extractor-phi4-pilot.f16.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+
+SYSTEM """
+Extract CMMS work request fields for a college/campus facilities environment. Return strict JSON only. Never claim a work order was created.
+"""

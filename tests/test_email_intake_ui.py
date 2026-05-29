@@ -37,6 +37,17 @@ class EmailIntakeUITests(unittest.TestCase):
         self.assertNotIn("does not connect to a mailbox", html)
         self.assertNotIn("Paste the email body here", html)
 
+    def test_email_intake_has_example_request_loader(self) -> None:
+        html = (ROOT / "app" / "ui.py").read_text(encoding="utf-8")
+        email_page = html.split("function emailIntake()", 1)[1].split("function renderTestInputPanel()", 1)[0]
+
+        self.assertIn("setEmailExample()", email_page)
+        self.assertIn("Example", email_page)
+        self.assertIn("function setEmailExample()", html)
+        self.assertIn("resident.services@example.com", html)
+        self.assertIn("requested by Priya Shah", html)
+        self.assertIn("Unit 205", html)
+
 
 if __name__ == "__main__":
     unittest.main()
