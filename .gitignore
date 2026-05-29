@@ -17,8 +17,10 @@ env/
 
 .vscode/
 .idea/
+.playwright-mcp/
 
 *.log
+chat-console-redesign*.png
 api_keys.json
 logs/
 data/

@@ -111,6 +111,7 @@ async def run_safety_reviewer_agent(
     drafts: dict[str, Any],
     call_ollama_func: ReviewerCaller,
     prompt_id: int | None = None,
+    timeout: int = 45,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     context_json = reviewer_context_json(
         result=result,
@@ -124,6 +125,7 @@ async def run_safety_reviewer_agent(
     try:
         content = await call_ollama_func(
             messages,
+            timeout=timeout,
             temperature=prompt_meta["temperature"],
             model=prompt_meta["model"],
         )

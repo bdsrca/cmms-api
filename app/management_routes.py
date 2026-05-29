@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 import inspect
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -12,7 +13,7 @@ from .api_keys import (
     list_api_keys as list_api_keys_helper,
     patch_api_key as patch_api_key_helper,
 )
-from .config import MODEL_NAME, SERVICE_NAME
+from .config import MODEL_NAME, OLLAMA_CHAT_URL, SERVICE_NAME, build_ai_config_status
 from .db import LOG_FILE, db_execute, db_fetchone
 from .operations_routes import LogResponse, read_log_lines
 from .security import PortalUser, current_admin, current_user
@@ -67,6 +68,25 @@ async def maybe_await(value: Any) -> Any:
     return value
 
 
+async def ollama_model_names() -> list[str] | None:
+    tags_url = OLLAMA_CHAT_URL.replace("/api/chat", "/api/tags")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(tags_url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    models = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(models, list):
+        return None
+    names: list[str] = []
+    for item in models:
+        if isinstance(item, dict) and isinstance(item.get("name"), str):
+            names.append(item["name"])
+    return names
+
+
 def build_management_router(
     *,
     require_local_control: Callable[[Request], None],
@@ -117,6 +137,14 @@ def build_management_router(
     @router.get("/api/admin/setup/status")
     async def setup_status(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
         return build_setup_status()
+
+    @router.get("/api/admin/ai-config")
+    async def ai_config(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:
+        available_models = await ollama_model_names()
+        status = build_ai_config_status(available_models=available_models)
+        if available_models is None:
+            status["warnings"].append("Could not verify configured models because Ollama tags were unavailable.")
+        return status
 
     @router.post("/api/admin/system/backup")
     async def create_backup(user: PortalUser = Depends(current_admin)) -> dict[str, Any]:

@@ -3883,9 +3883,34 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       link.remove();
       URL.revokeObjectURL(url);
     }
+    function renderAiConfigPanel(config) {
+      if (!config || config.error) return `<div class="card span-12"><h2>AI model controls</h2><div class="card-body"><p class="muted">${escapeHtml(config?.error || "Unavailable")}</p></div></div>`;
+      const modelRows = Object.entries(config.models || {}).map(([name, value]) => {
+        const entry = typeof value === "string" ? { model: value, enabled: true, uses_default_model: true } : value;
+        return `<div class="status-row"><span>${escapeHtml(name)}</span><strong>${escapeHtml(entry.model || "")}</strong><span class="pill ${entry.enabled === false ? "warning" : "ok"}">${entry.enabled === false ? "Disabled" : "Enabled"}</span></div>`;
+      }).join("");
+      const switchRows = Object.entries(config.switches || {}).map(([name, enabled]) => `<div class="status-row"><span>${escapeHtml(name)}</span><strong>${enabled ? "On" : "Off"}</strong></div>`).join("");
+      const timeoutRows = Object.entries(config.timeouts_seconds || {}).map(([name, value]) => `<div class="status-row"><span>${escapeHtml(name)}</span><strong>${escapeHtml(String(value))}s</strong></div>`).join("");
+      const warnings = (config.warnings || []).map(w => `<li>${escapeHtml(w)}</li>`).join("");
+      return `<div class="card span-12"><h2>AI model controls</h2><div class="card-body grid">
+        <div class="span-6 dashboard-status-list"><h3>Models</h3>${modelRows}</div>
+        <div class="span-3 dashboard-status-list"><h3>Switches</h3>${switchRows}</div>
+        <div class="span-3 dashboard-status-list"><h3>Timeouts</h3>${timeoutRows}<div class="status-row"><span>Review threshold</span><strong>${escapeHtml(String(config.low_confidence_review_threshold ?? ""))}</strong></div></div>
+        ${warnings ? `<div class="span-12"><ul class="muted">${warnings}</ul></div>` : ""}
+      </div></div>`;
+    }
+
+    async function loadAiConfig() {
+      const target = $("aiConfigPanel");
+      if (!target) return;
+      const config = await api("/api/admin/ai-config").catch(e => ({ error: e.message }));
+      target.innerHTML = renderAiConfigPanel(config);
+    }
+
     async function system() {
-      pageShell("System", `<div class="grid"><div class="card span-6"><h2>Status</h2><div class="card-body stack"><label>Local control API key</label><input id="systemKey" type="password" value="${escapeAttr(state.systemControlKey)}" placeholder="Paste generated API key"><button class="secondary" onclick="loadSystemStatus()">Refresh Status</button><pre id="systemStatusOut">{ "status": "Local system controls require an API key and admin session." }</pre></div></div>
-      <div class="card span-6"><h2>Local-only controls</h2><div class="card-body row"><button onclick="systemApi('/api/system/ollama/start',{method:'POST'}).then(loadSystemStatus)">Start Ollama</button><button class="secondary" onclick="systemApi('/api/system/ollama/stop',{method:'POST'}).then(loadSystemStatus)">Stop Ollama</button><button class="danger" onclick="systemApi('/api/system/shutdown',{method:'POST'})">Stop API</button></div></div></div>`);
+      pageShell("System", `<div class="grid"><div id="aiConfigPanel" class="span-12"></div><div class="card span-6"><h2>Status</h2><div class="card-body stack"><label>Local control API key</label><input id="systemKey" type="password" value="${escapeAttr(state.systemControlKey)}" placeholder="Paste generated API key"><button class="secondary" onclick="loadSystemStatus()">Refresh Status</button><pre id="systemStatusOut">{ "status": "Local system controls require an API key and admin session." }</pre></div></div>
+      <div class="card span-6"><h2>Local-only controls</h2><div class="card-body row"><button onclick="systemApi('/api/system/ollama/start',{method:'POST'}).then(loadSystemStatus).then(loadAiConfig)">Start Ollama</button><button class="secondary" onclick="systemApi('/api/system/ollama/stop',{method:'POST'}).then(loadSystemStatus).then(loadAiConfig)">Stop Ollama</button><button class="danger" onclick="systemApi('/api/system/shutdown',{method:'POST'})">Stop API</button></div></div></div>`);
+      loadAiConfig();
     }
 
     function systemHeaders() {

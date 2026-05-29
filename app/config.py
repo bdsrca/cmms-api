@@ -21,6 +21,24 @@ def text_from_env(name: str, default: str, environ: dict[str, str] | None = None
     return value.strip() if isinstance(value, str) and value.strip() else default
 
 
+def int_from_env(name: str, default: int, environ: dict[str, str] | None = None) -> int:
+    values = os.environ if environ is None else environ
+    try:
+        value = int(str(values.get(name, "")).strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def float_from_env(name: str, default: float, environ: dict[str, str] | None = None) -> float:
+    values = os.environ if environ is None else environ
+    try:
+        value = float(str(values.get(name, "")).strip())
+    except ValueError:
+        return default
+    return value if 0 <= value <= 1 else default
+
+
 def model_name_from_env(environ: dict[str, str] | None = None) -> str:
     return text_from_env("OLLAMA_MODEL", "qwen3:8b", environ)
 
@@ -70,6 +88,93 @@ def ollama_json_format_enabled_from_env(environ: dict[str, str] | None = None) -
     return bool_from_env("OLLAMA_JSON_FORMAT_ENABLED", True, environ)
 
 
+def classifier_timeout_seconds_from_env(environ: dict[str, str] | None = None) -> int:
+    return int_from_env("CLASSIFIER_TIMEOUT_SECONDS", 30, environ)
+
+
+def extractor_timeout_seconds_from_env(environ: dict[str, str] | None = None) -> int:
+    return int_from_env("EXTRACTOR_TIMEOUT_SECONDS", 60, environ)
+
+
+def draft_timeout_seconds_from_env(environ: dict[str, str] | None = None) -> int:
+    return int_from_env("DRAFT_TIMEOUT_SECONDS", 90, environ)
+
+
+def reviewer_timeout_seconds_from_env(environ: dict[str, str] | None = None) -> int:
+    return int_from_env("REVIEWER_TIMEOUT_SECONDS", 45, environ)
+
+
+def low_confidence_review_threshold_from_env(environ: dict[str, str] | None = None) -> float:
+    return float_from_env("LOW_CONFIDENCE_REVIEW_THRESHOLD", 0.75, environ)
+
+
+def _model_entry(name: str, model: str, enabled: bool, default_model: str) -> dict[str, object]:
+    return {
+        "model": model,
+        "enabled": enabled,
+        "uses_default_model": model == default_model,
+    }
+
+
+def build_ai_config_status(
+    environ: dict[str, str] | None = None,
+    available_models: list[str] | None = None,
+) -> dict[str, object]:
+    values = os.environ if environ is None else environ
+    default_model = model_name_from_env(values)
+    models = {
+        "default": default_model,
+        "classifier": _model_entry(
+            "classifier",
+            classifier_model_name_from_env(values),
+            classifier_model_enabled_from_env(values),
+            default_model,
+        ),
+        "extractor": _model_entry(
+            "extractor",
+            extractor_model_name_from_env(values),
+            extractor_model_enabled_from_env(values),
+            default_model,
+        ),
+        "draft": _model_entry(
+            "draft",
+            draft_model_name_from_env(values),
+            draft_model_enabled_from_env(values),
+            default_model,
+        ),
+    }
+    switches = {
+        "safety_reviewer": safety_reviewer_enabled_from_env(values),
+        "global_fast_mode": ai_fast_mode_enabled_from_env(values),
+        "ollama_json_format": ollama_json_format_enabled_from_env(values),
+    }
+    timeouts = {
+        "classifier": classifier_timeout_seconds_from_env(values),
+        "extractor": extractor_timeout_seconds_from_env(values),
+        "draft": draft_timeout_seconds_from_env(values),
+        "reviewer": reviewer_timeout_seconds_from_env(values),
+    }
+    warnings: list[str] = []
+    if available_models is not None:
+        available = {str(model) for model in available_models}
+        for agent, entry in models.items():
+            if agent == "default":
+                model = str(entry)
+            else:
+                model = str(entry["model"])
+                if not entry["enabled"]:
+                    continue
+            if model and model not in available:
+                warnings.append(f"Configured {agent} model '{model}' was not found in Ollama tags.")
+    return {
+        "models": models,
+        "switches": switches,
+        "timeouts_seconds": timeouts,
+        "low_confidence_review_threshold": low_confidence_review_threshold_from_env(values),
+        "warnings": warnings,
+    }
+
+
 MODEL_NAME = model_name_from_env()
 EXTRACTOR_MODEL_NAME = extractor_model_name_from_env()
 CLASSIFIER_MODEL_NAME = classifier_model_name_from_env()
@@ -77,6 +182,11 @@ DRAFT_MODEL_NAME = draft_model_name_from_env()
 SAFETY_REVIEWER_ENABLED = safety_reviewer_enabled_from_env()
 AI_FAST_MODE_ENABLED = ai_fast_mode_enabled_from_env()
 OLLAMA_JSON_FORMAT_ENABLED = ollama_json_format_enabled_from_env()
+CLASSIFIER_TIMEOUT_SECONDS = classifier_timeout_seconds_from_env()
+EXTRACTOR_TIMEOUT_SECONDS = extractor_timeout_seconds_from_env()
+DRAFT_TIMEOUT_SECONDS = draft_timeout_seconds_from_env()
+REVIEWER_TIMEOUT_SECONDS = reviewer_timeout_seconds_from_env()
+LOW_CONFIDENCE_REVIEW_THRESHOLD = low_confidence_review_threshold_from_env()
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 SERVICE_NAME = "local-cmms-llm-api"
 ADVISORY_WARNING = "Advisory mode only. No CMMS write-back was performed."

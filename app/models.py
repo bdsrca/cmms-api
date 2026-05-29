@@ -75,6 +75,7 @@ class IntakeResponse(BaseModel):
     run_id: str | None = None
     endpoint: str | None = None
     workflow_mode: str | None = None
+    workflow_mode_source: str | None = None
     fast_cache: dict[str, Any] | None = None
     environment_code: str | None = None
     trace: dict[str, Any] | None = None

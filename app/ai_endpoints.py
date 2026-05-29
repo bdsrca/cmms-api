@@ -1,6 +1,7 @@
 """Controlled CMMS AI endpoint orchestration and Ollama call helpers."""
 
 import hashlib
+import logging
 import json
 import re
 import threading
@@ -29,11 +30,16 @@ from .config import (
     AI_FAST_MODE_ENABLED,
     ALLOWED_REQUEST_TYPES,
     CLASSIFIER_MODEL_NAME,
+    CLASSIFIER_TIMEOUT_SECONDS,
     DRAFT_MODEL_NAME,
+    DRAFT_TIMEOUT_SECONDS,
     EXTRACTOR_MODEL_NAME,
+    EXTRACTOR_TIMEOUT_SECONDS,
+    LOW_CONFIDENCE_REVIEW_THRESHOLD,
     MODEL_NAME,
     OLLAMA_JSON_FORMAT_ENABLED,
     OLLAMA_CHAT_URL,
+    REVIEWER_TIMEOUT_SECONDS,
     SAFETY_REVIEWER_ENABLED,
 )
 from .db import db_execute
@@ -57,6 +63,7 @@ from .workflow_trace import (
 )
 
 OllamaCaller = Callable[..., Awaitable[str]]
+logger = logging.getLogger(__name__)
 
 FAST_EXTRACTION_CACHE_TTL_SECONDS = 10 * 60
 FAST_EXTRACTION_CACHE_MAX_ENTRIES = 128
@@ -232,12 +239,17 @@ def build_cmms_intake_push_result(
 
 
 def workflow_mode_for_payload(payload: Any) -> str:
+    mode, _source = workflow_mode_for_payload_with_source(payload)
+    return mode
+
+
+def workflow_mode_for_payload_with_source(payload: Any) -> tuple[str, str]:
     if AI_FAST_MODE_ENABLED:
-        return "fast"
+        return "fast", "global_override"
     explicit_mode = getattr(payload, "workflow_mode", None)
     if explicit_mode in {"fast", "full"}:
-        return str(explicit_mode)
-    return default_workflow_mode(getattr(payload, "environment_code", None))
+        return str(explicit_mode), "request"
+    return default_workflow_mode(getattr(payload, "environment_code", None)), "environment_default"
 
 
 def fast_mode_reviewer_block() -> dict[str, Any]:
@@ -335,9 +347,12 @@ def parse_json_response(content: str) -> dict[str, Any]:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
+        logger.warning("llm_json_parse status=failed error=%s", exc.__class__.__name__)
         raise HTTPException(status_code=500, detail="Model returned invalid JSON") from exc
     if not isinstance(parsed, dict):
+        logger.warning("llm_json_parse status=failed error=non_object")
         raise HTTPException(status_code=500, detail="Model returned invalid JSON")
+    logger.info("llm_json_parse status=success")
     return parsed
 
 
@@ -354,23 +369,79 @@ async def call_ollama(
         payload["format"] = resolved_response_format
     if temperature is not None:
         payload["options"] = {"temperature": temperature}
+    agent_name = infer_llm_agent_name(messages)
+    started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(OLLAMA_CHAT_URL, json=payload)
             response.raise_for_status()
     except httpx.TimeoutException as exc:
+        audit_llm_call(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=resolved_response_format,
+            timeout=timeout,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="timeout",
+        )
         raise HTTPException(status_code=502, detail="Ollama request timed out") from exc
     except httpx.HTTPStatusError as exc:
+        audit_llm_call(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=resolved_response_format,
+            timeout=timeout,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status=f"http_{exc.response.status_code}",
+        )
         raise HTTPException(status_code=502, detail=f"Ollama returned HTTP {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
+        audit_llm_call(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=resolved_response_format,
+            timeout=timeout,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="connection_error",
+        )
         raise HTTPException(status_code=502, detail="Could not connect to Ollama") from exc
     try:
         data = response.json()
         content = data["message"]["content"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        audit_llm_call(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=resolved_response_format,
+            timeout=timeout,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="bad_response",
+        )
         raise HTTPException(status_code=502, detail="Ollama returned an unexpected response") from exc
     if not isinstance(content, str):
+        audit_llm_call(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature,
+            response_format=resolved_response_format,
+            timeout=timeout,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="bad_response",
+        )
         raise HTTPException(status_code=502, detail="Ollama returned an unexpected response")
+    audit_llm_call(
+        agent_name=agent_name,
+        model=model,
+        temperature=temperature,
+        response_format=resolved_response_format,
+        timeout=timeout,
+        duration_ms=(time.perf_counter() - started) * 1000,
+        status="ok",
+    )
     return content.strip()
 
 
@@ -384,6 +455,43 @@ def classifier_model_name() -> str:
 
 def draft_model_name() -> str:
     return DRAFT_MODEL_NAME
+
+
+def infer_llm_agent_name(messages: list[dict[str, str]]) -> str:
+    system = messages[0].get("content", "") if messages else ""
+    if "Classify the CMMS request type only" in system:
+        return "classifier"
+    if "Extract CMMS" in system:
+        return "field_extractor"
+    if "Generate advisory CMMS draft text only" in system:
+        return "draft_generator"
+    if "Safety Reviewer Agent" in system:
+        return "safety_reviewer"
+    if "Code Normalization Suggestion Agent" in system:
+        return "code_normalizer"
+    return "unknown"
+
+
+def audit_llm_call(
+    *,
+    agent_name: str,
+    model: str,
+    temperature: float | None,
+    response_format: str | None,
+    timeout: int,
+    duration_ms: float,
+    status: str,
+) -> None:
+    logger.info(
+        "llm_call agent=%s model=%s temperature=%s response_format=%s timeout=%s duration_ms=%.1f status=%s",
+        agent_name,
+        model,
+        temperature,
+        response_format or "none",
+        timeout,
+        duration_ms,
+        status,
+    )
 
 
 def ollama_response_format(response_format: str | None) -> str | None:
@@ -516,12 +624,19 @@ def validate_intake(
         "priority": validated["priority"],
         "summary": validated["summary"],
     }
+    warnings = [ADVISORY_WARNING]
+    needs_human_review = not can_create_work_order
+    if validated["confidence"] < LOW_CONFIDENCE_REVIEW_THRESHOLD:
+        needs_human_review = True
+        warnings.append(
+            f"Model confidence {validated['confidence']:.2f} is below review threshold {LOW_CONFIDENCE_REVIEW_THRESHOLD:.2f}."
+        )
     validation = {
         "can_create_work_order": can_create_work_order,
-        "needs_human_review": not can_create_work_order,
+        "needs_human_review": needs_human_review,
         "missing_fields": validated["missing_fields"],
         "errors": errors,
-        "warnings": [ADVISORY_WARNING],
+        "warnings": warnings,
     }
     extraction_context = {
         "raw_extracted_fields": validated.get("raw_extracted_fields", {}),
@@ -543,7 +658,12 @@ def redacted_summary(text: str, max_len: int = 180) -> str:
 
 async def summarize_work_order(payload: Any, call_ollama_func: OllamaCaller = call_ollama) -> dict[str, Any]:
     messages, prompt_meta = prompt_messages("summarize-work-order", {"text": payload.text})
-    summary = await call_ollama_func(messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+    summary = await call_ollama_func(
+        messages,
+        timeout=DRAFT_TIMEOUT_SECONDS,
+        temperature=prompt_meta["temperature"],
+        model=prompt_meta["model"],
+    )
     return {"summary": summary}
 
 
@@ -551,6 +671,7 @@ async def cmms_assistant(payload: Any, call_ollama_func: OllamaCaller = call_oll
     messages, prompt_meta = prompt_messages("cmms-assistant", {"text": payload.text})
     content = await call_ollama_func(
         messages,
+        timeout=DRAFT_TIMEOUT_SECONDS,
         temperature=prompt_meta["temperature"],
         model=prompt_meta["model"],
     )
@@ -580,6 +701,7 @@ async def extract_work_order_fields(payload: Any, call_ollama_func: OllamaCaller
     )
     content = await call_ollama_func(
         messages,
+        timeout=EXTRACTOR_TIMEOUT_SECONDS,
         temperature=prompt_meta["temperature"],
         model=extractor_model_name(),
         response_format="json",
@@ -601,11 +723,11 @@ async def execute_ai_endpoint_for_test(
 ) -> dict[str, Any]:
     if endpoint == "summarize-work-order":
         messages, meta = prompt_messages(endpoint, {"text": input_text}, prompt_id)
-        summary = await call_ollama_func(messages, temperature=meta["temperature"], model=meta["model"])
+        summary = await call_ollama_func(messages, timeout=DRAFT_TIMEOUT_SECONDS, temperature=meta["temperature"], model=meta["model"])
         return {"summary": summary, "prompt": meta}
     if endpoint == "cmms-assistant":
         messages, meta = prompt_messages(endpoint, {"text": input_text}, prompt_id)
-        response = await call_ollama_func(messages, temperature=meta["temperature"], model=meta["model"])
+        response = await call_ollama_func(messages, timeout=DRAFT_TIMEOUT_SECONDS, temperature=meta["temperature"], model=meta["model"])
         return {
             "mode": "cmms-assistant",
             "response": response,
@@ -628,7 +750,7 @@ async def execute_ai_endpoint_for_test(
             },
             prompt_id,
         )
-        content = await call_ollama_func(messages, temperature=meta["temperature"], model=meta["model"])
+        content = await call_ollama_func(messages, timeout=EXTRACTOR_TIMEOUT_SECONDS, temperature=meta["temperature"], model=meta["model"])
         result = validate_extracted_fields(parse_json_response(content), valid_buildings, valid_priorities)
         result["prompt"] = meta
         return result
@@ -659,7 +781,7 @@ async def cmms_intake(
 ) -> dict[str, Any]:
     env_hint = payload.environment_code.upper() if payload.environment_code else None
     intake_source = source if source is not None else payload.source
-    workflow_mode = workflow_mode_for_payload(payload)
+    workflow_mode, workflow_mode_source = workflow_mode_for_payload_with_source(payload)
     run_id = start_workflow_run(
         "cmms-intake",
         environment_code=env_hint,
@@ -718,7 +840,13 @@ async def cmms_intake(
                 fast_cache = fast_cache_block("hit", cache_key)
             else:
                 extracted_data = parse_json_response(
-                    await call_ollama_func(extraction_messages, temperature=prompt_meta["temperature"], model=prompt_meta["model"])
+                    await call_ollama_func(
+                        extraction_messages,
+                        timeout=EXTRACTOR_TIMEOUT_SECONDS,
+                        temperature=prompt_meta["temperature"],
+                        model=prompt_meta["model"],
+                        response_format="json",
+                    )
                 )
                 write_fast_extraction_cache(cache_key, extracted_data)
                 model_call_count = 1
@@ -739,6 +867,7 @@ async def cmms_intake(
             classifier_data = parse_json_response(
                 await call_ollama_func(
                     intake_messages["classifier"],
+                    timeout=CLASSIFIER_TIMEOUT_SECONDS,
                     temperature=prompt_meta["temperature"],
                     model=classifier_model_name(),
                 )
@@ -746,8 +875,10 @@ async def cmms_intake(
             extractor_data = parse_json_response(
                 await call_ollama_func(
                     intake_messages["field_extractor"],
+                    timeout=EXTRACTOR_TIMEOUT_SECONDS,
                     temperature=prompt_meta["temperature"],
                     model=extractor_model_name(),
+                    response_format="json",
                 )
             )
             request_type, confidence, fields, validation, extraction_context = validate_intake(
@@ -1142,7 +1273,13 @@ async def cmms_intake(
                 {"role": "user", "content": json.dumps(draft_context)},
             ]
             draft_data = parse_json_response(
-                await call_ollama_func(draft_messages, temperature=prompt_meta["temperature"], model=draft_model_name())
+                await call_ollama_func(
+                    draft_messages,
+                    timeout=DRAFT_TIMEOUT_SECONDS,
+                    temperature=prompt_meta["temperature"],
+                    model=draft_model_name(),
+                    response_format="json",
+                )
             )
             drafts = {
                 "draft_wo_description": str(draft_data.get("draft_wo_description") or fields["summary"]),
@@ -1192,6 +1329,7 @@ async def cmms_intake(
                 drafts=drafts,
                 call_ollama_func=call_ollama_func,
                 prompt_id=reviewer_prompt_id,
+                timeout=REVIEWER_TIMEOUT_SECONDS,
             )
             db_execute(
                 "UPDATE workflow_run_steps SET model = ?, prompt_version = ? WHERE id = ?",
@@ -1284,6 +1422,7 @@ async def cmms_intake(
             "run_id": run_id,
             "endpoint": "cmms-intake",
             "workflow_mode": workflow_mode,
+            "workflow_mode_source": workflow_mode_source,
             "fast_cache": fast_cache,
             "environment_code": env_code,
             "trace": {"available": True, "run_id": run_id},

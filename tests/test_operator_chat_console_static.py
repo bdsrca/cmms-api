@@ -56,6 +56,13 @@ class OperatorChatConsoleStaticTests(unittest.TestCase):
         self.assertIn("AbortController", ui)
         self.assertIn("TextDecoder", ui)
         self.assertIn('fetch("/api/admin/chat-test/message/stream"', ui)
+
+    def test_system_panel_shows_read_only_ai_model_config(self) -> None:
+        ui = (ROOT / "app" / "ui.py").read_text(encoding="utf-8")
+
+        self.assertIn("/api/admin/ai-config", ui)
+        self.assertIn("AI model controls", ui)
+        self.assertIn("renderAiConfigPanel", ui)
         self.assertIn("appendChatAssistantDelta", ui)
         self.assertIn('aria-label="Delete chat"', ui)
         self.assertIn("chat-message-actions", ui)

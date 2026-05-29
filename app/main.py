@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import secrets
@@ -30,7 +31,9 @@ from .config import (
     DEFAULT_PROMPT_VERSIONS,
     DEFAULT_VALIDATION_RULES,
     MODEL_NAME,
+    OLLAMA_CHAT_URL,
     SERVICE_NAME,
+    build_ai_config_status,
 )
 from .db import (
     BASE_DIR,
@@ -132,9 +135,17 @@ async def call_ollama(
         "temperature": temperature,
         "model": model,
     }
-    if response_format is not None:
+    if response_format is not None and supports_kwarg(ai_call_ollama, "response_format"):
         kwargs["response_format"] = response_format
     return await ai_call_ollama(messages, **kwargs)
+
+
+def supports_kwarg(func: Any, name: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()) or name in signature.parameters
 
 
 async def is_ollama_running() -> bool:
@@ -145,6 +156,30 @@ async def is_ollama_running() -> bool:
     except httpx.HTTPError:
         return False
     return True
+
+
+async def configured_ollama_models() -> list[str] | None:
+    tags_url = OLLAMA_CHAT_URL.replace("/api/chat", "/api/tags")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(tags_url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    models = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(models, list):
+        return None
+    return [item["name"] for item in models if isinstance(item, dict) and isinstance(item.get("name"), str)]
+
+
+async def log_ai_config_warnings() -> None:
+    available_models = await configured_ollama_models()
+    if available_models is None:
+        logger.warning("ai_config_model_check_skipped reason=ollama_tags_unavailable")
+        return
+    for warning in build_ai_config_status(available_models=available_models)["warnings"]:
+        logger.warning("ai_config_warning message=%s", warning)
 
 
 async def wait_for_ollama(timeout_seconds: int = 15) -> bool:
@@ -244,6 +279,7 @@ async def startup() -> None:
             seed_default_prompt_versions,
         ]
     )
+    await log_ai_config_warnings()
     logger.info("service_start service=%s model=%s", SERVICE_NAME, MODEL_NAME)
 
 
