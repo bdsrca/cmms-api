@@ -635,6 +635,8 @@ PORTAL_HTML = r"""<!doctype html>
     .chat-message-row:hover .chat-message-actions { opacity: 1; }
     .chat-message-actions button { min-height: 28px; padding: 4px 8px; border: 0; background: transparent; box-shadow: none; color: #6b7280; }
     .chat-message-actions button:hover { background: #f4f4f4; color: #111827; }
+    .chat-thinking-output { margin-bottom: 10px; color: #6b7280; }
+    .chat-thinking-output summary { cursor: pointer; font-weight: 700; color: #4b5563; }
     .chat-composer { padding: 12px 18px 16px; background: #fff; }
     .chat-composer-shell { max-width: 920px; margin: 0 auto; border: 1px solid #d9d9e3; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.06); background: #fff; padding: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 8px; }
     .chat-composer-shell.drag-over { border-color: #6b5cff; background: #f7f7ff; }
@@ -3368,6 +3370,7 @@ Passing readiness means the request is eligible for a controlled workflow. It do
                   <option value="4096">Max</option>
                 </select>
                 <label class="thinking-toggle"><input id="chatThinkingToggle" type="checkbox"> Thinking</label>
+                <span id="chatThinkingNotice" class="muted"></span>
                 <button class="secondary" onclick="downloadCurrentChatMarkdown()">Export MD</button>
                 <button class="secondary" onclick="downloadCurrentChatJson()">Export JSON</button>
                 <button class="secondary" onclick="clearCurrentChat()">Clear chat</button>
@@ -3420,11 +3423,22 @@ Passing readiness means the request is eligible for a controlled workflow. It do
     function selectedModelLooksVisionCapable(modelName) {
       return /(llava|vision|vl|qwen2\.?5[-_]?vl|minicpm|gemma3|bakllava|moondream)/i.test(modelName || "");
     }
+    function selectedModelSupportsNativeThinking(modelName = $("chatModelSelect")?.value || "") {
+      return /(qwen|deepseek|qwq|r1)/i.test(modelName || "");
+    }
+    function shouldSendNativeThinking() {
+      return Boolean($("chatThinkingToggle")?.checked && selectedModelSupportsNativeThinking());
+    }
     function updateChatVisionNotice() {
       const notice = $("chatVisionNotice");
       const select = $("chatModelSelect");
       if (!notice || !select) return;
       const modelName = select.value || "";
+      const thinkingToggle = $("chatThinkingToggle");
+      const thinkingNotice = $("chatThinkingNotice");
+      const thinkingSupported = selectedModelSupportsNativeThinking(modelName);
+      if (thinkingToggle) chatThinkingToggle.disabled = Boolean(modelName && !thinkingSupported);
+      if (thinkingNotice) thinkingNotice.textContent = modelName && !thinkingSupported ? "Thinking is disabled for this model." : "";
       if (!modelName) {
         notice.textContent = "Image understanding needs a vision-capable Ollama model.";
         notice.classList.add("warning");
@@ -3457,7 +3471,7 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       target.innerHTML = session.messages.map((message, index) => {
         const images = (message.images || []).map(image => `<img src="data:image/*;base64,${escapeAttr(image)}" alt="Attached image">`).join("");
         return `<div class="chat-message-row ${message.role}">
-          <div class="chat-bubble ${message.role}">${escapeHtml(message.content)}${images ? `<div class="chat-image-strip">${images}</div>` : ""}</div>
+          <div class="chat-bubble ${message.role}">${renderChatMessageContent(message)}${images ? `<div class="chat-image-strip">${images}</div>` : ""}</div>
           <div class="chat-message-actions">
             <button onclick="copyChatMessage(${index})" aria-label="Copy message" title="Copy message">Copy</button>
             <button onclick="deleteChatMessage(${index})" aria-label="Delete message" title="Delete message">Delete</button>
@@ -3465,6 +3479,10 @@ Passing readiness means the request is eligible for a controlled workflow. It do
         </div>`;
       }).join("");
       target.scrollTop = target.scrollHeight;
+    }
+    function renderChatMessageContent(message) {
+      const thinking = message.thinking ? `<details class="chat-thinking-output" open><summary>Thinking</summary>${escapeHtml(message.thinking)}</details>` : "";
+      return `${thinking}${escapeHtml(message.content || "")}`;
     }
     async function copyChatMessage(index) {
       const message = currentChatSession().messages[index];
@@ -3710,14 +3728,24 @@ Passing readiness means the request is eligible for a controlled workflow. It do
       }
       renderChatMessages();
     }
+    function appendChatAssistantThinking(message, thinking) {
+      if (!thinking) return;
+      if (message.thinking && thinking.startsWith(message.thinking)) {
+        message.thinking = thinking;
+      } else {
+        message.thinking = `${message.thinking || ""}${thinking}`;
+      }
+      renderChatMessages();
+    }
     function chatStreamDeltaFromChunk(chunk) {
-      return ((chunk.message || {}).content || chunk.response || "");
+      return ((chunk.message || {}).content || (chunk.message || {}).thinking || chunk.response || "");
     }
     function processChatStreamLine(line, assistantMessage) {
       if (!line.trim()) return false;
       const chunk = JSON.parse(line);
       if (chunk.error) throw new Error(chunk.error);
-      appendChatAssistantContent(assistantMessage, chatStreamDeltaFromChunk(chunk));
+      if (chunk.thinking_only) appendChatAssistantThinking(assistantMessage, chatStreamDeltaFromChunk(chunk));
+      else appendChatAssistantContent(assistantMessage, chatStreamDeltaFromChunk(chunk));
       return Boolean(chunk.done);
     }
     async function sendChatConsoleMessage() {
@@ -3757,7 +3785,7 @@ Passing readiness means the request is eligible for a controlled workflow. It do
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model,
-            thinking_enabled: $("chatThinkingToggle").checked,
+            thinking_enabled: shouldSendNativeThinking(),
             response_num_predict: Number($("chatResponseLengthSelect")?.value || 1024),
             images: userMessage.images || [],
             messages: buildChatRequestMessages(session, assistantMessage),
@@ -3778,7 +3806,7 @@ Passing readiness means the request is eligible for a controlled workflow. It do
           if (done) break;
         }
         if (buffer.trim()) processChatStreamLine(buffer, assistantMessage);
-        if (!assistantMessage.content.trim()) throw new Error("Ollama returned an empty response");
+        if (!assistantMessage.content.trim() && !String(assistantMessage.thinking || "").trim()) throw new Error("Ollama returned an empty response");
         session.updatedAt = Date.now();
         $("chatRuntimeLabel").textContent = `ollama / ${model}`;
         saveChatSessions();

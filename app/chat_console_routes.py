@@ -61,6 +61,22 @@ def _messages_for_ollama(payload: ChatConsoleRequest) -> list[dict[str, object]]
     return messages
 
 
+def _ollama_chat_payload(payload: ChatConsoleRequest, stream: bool) -> dict[str, object]:
+    return {
+        "model": payload.model,
+        "stream": stream,
+        "think": payload.thinking_enabled,
+        "options": {"num_predict": payload.response_num_predict},
+        "messages": _messages_for_ollama(payload),
+    }
+
+
+def _chat_content_from_message(message: dict[str, object]) -> str:
+    content = str(message.get("content") or "")
+    thinking = str(message.get("thinking") or "")
+    return content or thinking
+
+
 router = APIRouter(prefix="/api/admin/chat-test", dependencies=[Depends(current_admin)])
 
 
@@ -78,13 +94,7 @@ async def chat_console_message(payload: ChatConsoleRequest, user: PortalUser = D
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 OLLAMA_CHAT_URL,
-                json={
-                    "model": payload.model,
-                    "stream": False,
-                    "think": payload.thinking_enabled,
-                    "options": {"num_predict": payload.response_num_predict},
-                    "messages": _messages_for_ollama(payload),
-                },
+                json=_ollama_chat_payload(payload, stream=False),
             )
             response.raise_for_status()
     except httpx.TimeoutException as exc:
@@ -95,7 +105,8 @@ async def chat_console_message(payload: ChatConsoleRequest, user: PortalUser = D
         raise HTTPException(status_code=502, detail="Could not connect to Ollama") from exc
 
     data = response.json()
-    content = ((data.get("message") or {}).get("content") or data.get("response") or "").strip()
+    message = data.get("message") or {}
+    content = (_chat_content_from_message(message) or data.get("response") or "").strip()
     if not content:
         raise HTTPException(status_code=502, detail="Ollama returned an empty response")
 
@@ -112,17 +123,21 @@ async def chat_console_message_stream(payload: ChatConsoleRequest, user: PortalU
                 async with client.stream(
                     "POST",
                     OLLAMA_CHAT_URL,
-                    json={
-                        "model": payload.model,
-                        "stream": True,
-                        "think": payload.thinking_enabled,
-                        "options": {"num_predict": payload.response_num_predict},
-                        "messages": _messages_for_ollama(payload),
-                    },
+                    json=_ollama_chat_payload(payload, stream=True),
                 ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
-                        if line:
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            message = chunk.get("message") or {}
+                            if message.get("thinking") and not message.get("content"):
+                                message["content"] = message.get("thinking")
+                                chunk["message"] = message
+                                chunk["thinking_only"] = True
+                            yield json.dumps(chunk) + "\n"
+                        except json.JSONDecodeError:
                             yield f"{line}\n"
         except httpx.TimeoutException:
             yield json.dumps({"error": "Ollama request timed out"}) + "\n"
