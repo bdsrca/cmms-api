@@ -6,11 +6,14 @@ import json
 import re
 from typing import Any
 
-from .schema import validate_chat_record
+from .schema import SUMMARY_MAX_CHARS, validate_chat_record
 
 
 SYSTEM_PROMPT = (
     "Extract CMMS work request fields for a college/campus facilities environment. "
+    "Do not predict building or room; those are input code fields merged by the API. "
+    "Use exact CMMS code casing for request_type and priority, for example HVAC, General Maintenance, P3. "
+    f"Keep summary concise, at most {SUMMARY_MAX_CHARS} characters. "
     "Return strict JSON only. "
     "Never claim a work order was created."
 )
@@ -27,6 +30,8 @@ SENSITIVE_PATTERNS = {
     "api_key": re.compile(r"\b(?:api[_-]?key|token|secret|sk-[a-z0-9_-]+)\b", re.IGNORECASE),
 }
 
+INPUT_CODE_FIELDS = {"building", "room"}
+
 
 def reject_if_sensitive(text: str) -> None:
     for name, pattern in SENSITIVE_PATTERNS.items():
@@ -41,6 +46,18 @@ def _clean_optional_string(value: Any) -> str | None:
     return cleaned or None
 
 
+def _clean_summary(value: Any) -> str | None:
+    cleaned = _clean_optional_string(" ".join(str(value).split()) if value is not None else None)
+    if cleaned is None or len(cleaned) <= SUMMARY_MAX_CHARS:
+        return cleaned
+    clipped = cleaned[:SUMMARY_MAX_CHARS].rstrip()
+    if " " in clipped:
+        word_boundary = clipped.rsplit(" ", 1)[0].rstrip()
+        if len(word_boundary) >= int(SUMMARY_MAX_CHARS * 0.75):
+            clipped = word_boundary
+    return clipped.rstrip(" ,;:-")
+
+
 def _clean_missing_fields(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -48,21 +65,18 @@ def _clean_missing_fields(value: Any) -> list[str]:
     result: list[str] = []
     for item in value:
         field = str(item).strip()
-        if field and field not in seen:
+        if field and field not in INPUT_CODE_FIELDS and field not in seen:
             seen.add(field)
             result.append(field)
     return result
 
 
 def normalize_expected_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    priority = _clean_optional_string(payload.get("priority"))
     return {
-        "request_type": str(payload.get("request_type", "")).strip().lower(),
-        "building": _clean_optional_string(payload.get("building")),
-        "room": _clean_optional_string(payload.get("room")),
+        "request_type": str(payload.get("request_type", "")).strip(),
         "asset_hint": _clean_optional_string(payload.get("asset_hint")),
-        "priority": priority.lower() if priority else None,
-        "summary": _clean_optional_string(payload.get("summary")),
+        "priority": _clean_optional_string(payload.get("priority")),
+        "summary": _clean_summary(payload.get("summary")),
         "missing_fields": _clean_missing_fields(payload.get("missing_fields")),
         "human_review_recommended": bool(payload.get("human_review_recommended")),
     }

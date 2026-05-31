@@ -4,6 +4,7 @@ import unittest
 
 from training.cmms_field_extractor.schema import (
     REQUIRED_ASSISTANT_KEYS,
+    SUMMARY_MAX_CHARS,
     assistant_payload_errors,
     validate_chat_record,
 )
@@ -56,8 +57,6 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
                     "role": "assistant",
                     "content": (
                         '{"request_type":"work_order_request",'
-                        '"building":"North Campus",'
-                        '"room":"B204",'
                         '"asset_hint":null,'
                         '"priority":"urgent",'
                         '"summary":"Water dripping from ceiling in room B204",'
@@ -73,8 +72,6 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
             REQUIRED_ASSISTANT_KEYS,
             {
                 "request_type",
-                "building",
-                "room",
                 "asset_hint",
                 "priority",
                 "summary",
@@ -90,8 +87,6 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
         record = self.valid_record()
         record["messages"][2]["content"] = (
             '{"request_type":"work_order_request",'
-            '"building":"North Campus",'
-            '"room":"B204",'
             '"asset_hint":null,'
             '"priority":"urgent",'
             '"summary":"Water dripping",'
@@ -103,8 +98,6 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
     def test_rejects_extra_assistant_key(self) -> None:
         payload = {
             "request_type": "work_order_request",
-            "building": "North Campus",
-            "room": "B204",
             "asset_hint": None,
             "priority": "urgent",
             "summary": "Water dripping",
@@ -115,11 +108,22 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
 
         self.assertIn("assistant.extra:work_order_created", assistant_payload_errors(payload))
 
-    def test_rejects_unsafe_created_claim_in_summary(self) -> None:
+    def test_rejects_building_as_model_output(self) -> None:
         payload = {
             "request_type": "work_order_request",
             "building": "North Campus",
-            "room": "B204",
+            "asset_hint": None,
+            "priority": "urgent",
+            "summary": "Water dripping",
+            "missing_fields": [],
+            "human_review_recommended": False,
+        }
+
+        self.assertIn("assistant.extra:building", assistant_payload_errors(payload))
+
+    def test_rejects_unsafe_created_claim_in_summary(self) -> None:
+        payload = {
+            "request_type": "work_order_request",
             "asset_hint": None,
             "priority": "urgent",
             "summary": "Work order created for water leak.",
@@ -128,6 +132,18 @@ class CmmsFieldExtractorSchemaTests(unittest.TestCase):
         }
 
         self.assertIn("assistant.unsafe_claim:summary", assistant_payload_errors(payload))
+
+    def test_rejects_overlong_summary(self) -> None:
+        payload = {
+            "request_type": "work_order_request",
+            "asset_hint": None,
+            "priority": "urgent",
+            "summary": "x" * (SUMMARY_MAX_CHARS + 1),
+            "missing_fields": [],
+            "human_review_recommended": False,
+        }
+
+        self.assertIn("assistant.summary:too_long", assistant_payload_errors(payload))
 
 
 class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
@@ -148,12 +164,10 @@ class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
         normalized = normalize_expected_payload(
             {
                 "request_type": "Work_Order_Request",
-                "building": "",
-                "room": " B204 ",
                 "asset_hint": "",
                 "priority": "URGENT",
                 "summary": "  Water leak near ceiling.  ",
-                "missing_fields": ["building", "building"],
+                "missing_fields": ["building", "room", "priority", "priority"],
                 "human_review_recommended": "yes",
             }
         )
@@ -161,15 +175,37 @@ class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
         self.assertEqual(
             normalized,
             {
-                "request_type": "work_order_request",
-                "building": None,
-                "room": "B204",
+                "request_type": "Work_Order_Request",
                 "asset_hint": None,
-                "priority": "urgent",
+                "priority": "URGENT",
                 "summary": "Water leak near ceiling.",
-                "missing_fields": ["building"],
+                "missing_fields": ["priority"],
                 "human_review_recommended": True,
             },
+        )
+
+    def test_normalizes_summary_to_contract_length(self) -> None:
+        long_summary = (
+            "Please set up tables, chairs, trash bins, recycling bins, compost bins, "
+            "lighting, HVAC, doors, signs, and cleanup for the campus event before noon "
+            "with final walkthrough, reset, and extra support after the event ends."
+        )
+
+        normalized = normalize_expected_payload(
+            {
+                "request_type": "General Maintenance",
+                "asset_hint": None,
+                "priority": "P3",
+                "summary": long_summary,
+                "missing_fields": [],
+                "human_review_recommended": False,
+            }
+        )
+
+        self.assertLessEqual(len(normalized["summary"]), SUMMARY_MAX_CHARS)
+        self.assertEqual(
+            normalized["summary"],
+            "Please set up tables, chairs, trash bins, recycling bins, compost bins, lighting, HVAC, doors, signs, and cleanup for the campus event before noon with final",
         )
 
     def test_build_chat_record_returns_valid_record(self) -> None:
@@ -177,8 +213,6 @@ class CmmsFieldExtractorAnonymizationTests(unittest.TestCase):
             user_text="Water leak in room B204 at North Campus.",
             expected={
                 "request_type": "work_order_request",
-                "building": "North Campus",
-                "room": "B204",
                 "asset_hint": None,
                 "priority": "urgent",
                 "summary": "Water leak in room B204",
@@ -271,6 +305,23 @@ class CmmsFieldExtractorTrainingScriptTests(unittest.TestCase):
         import training.cmms_field_extractor.train_unsloth as train_unsloth
 
         self.assertEqual(train_unsloth.sft_dataset_kwargs(), {"skip_prepare_dataset": True})
+
+    def test_training_script_accepts_resume_from_checkpoint(self) -> None:
+        import training.cmms_field_extractor.train_unsloth as train_unsloth
+
+        args = train_unsloth.parse_args(
+            [
+                "--data-path",
+                "train.jsonl",
+                "--resume-from-checkpoint",
+                "models/cmms_field_extractor/college-phi4-v1-lora/checkpoint-514",
+            ]
+        )
+
+        self.assertEqual(
+            args.resume_from_checkpoint,
+            "models/cmms_field_extractor/college-phi4-v1-lora/checkpoint-514",
+        )
 
 
 class CmmsFieldExtractorTrainingDocsTests(unittest.TestCase):

@@ -8,8 +8,6 @@ from typing import Any
 
 REQUIRED_ASSISTANT_KEYS = {
     "request_type",
-    "building",
-    "room",
     "asset_hint",
     "priority",
     "summary",
@@ -17,7 +15,8 @@ REQUIRED_ASSISTANT_KEYS = {
     "human_review_recommended",
 }
 
-STRING_OR_NULL_KEYS = {"building", "room", "asset_hint", "priority", "summary"}
+SUMMARY_MAX_CHARS = 160
+STRING_OR_NULL_KEYS = {"asset_hint", "priority", "summary"}
 UNSAFE_CLAIMS = (
     "work order created",
     "created work order",
@@ -56,6 +55,8 @@ def assistant_payload_errors(payload: dict[str, Any]) -> list[str]:
         value = payload.get(key)
         if isinstance(value, str) and any(claim in value.lower() for claim in UNSAFE_CLAIMS):
             errors.append(f"assistant.unsafe_claim:{key}")
+        if isinstance(value, str) and len(value) > SUMMARY_MAX_CHARS:
+            errors.append(f"assistant.{key}:too_long")
 
     return errors
 

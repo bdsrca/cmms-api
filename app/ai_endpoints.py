@@ -71,6 +71,7 @@ logger = logging.getLogger(__name__)
 FAST_EXTRACTION_CACHE_TTL_SECONDS = 10 * 60
 FAST_EXTRACTION_CACHE_MAX_ENTRIES = 128
 FAST_EXTRACTION_CACHE_VERSION = "canonical_tokens_v1"
+EXTRACTED_SUMMARY_MAX_CHARS = 160
 _FAST_EXTRACTION_CACHE: dict[str, dict[str, Any]] = {}
 _FAST_EXTRACTION_CACHE_LOCK = threading.Lock()
 
@@ -303,11 +304,35 @@ def normalize_allowed_values(values: list[str]) -> list[str]:
     return [value.strip() for value in values if value and value.strip()]
 
 
+def match_allowed_value(value: str | None, allowed_values: list[str]) -> str | None:
+    if not value:
+        return None
+    if value in allowed_values:
+        return value
+    folded = value.casefold()
+    for allowed in allowed_values:
+        if allowed.casefold() == folded:
+            return allowed
+    return None
+
+
 def clean_optional_text(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     text = value.strip()
     return text or None
+
+
+def clean_summary_text(value: Any, *, max_chars: int = EXTRACTED_SUMMARY_MAX_CHARS) -> str:
+    text = clean_optional_text(value) or ""
+    text = " ".join(text.split())
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    boundary = max(cut.rfind(" "), cut.rfind(","), cut.rfind(";"), cut.rfind(":"))
+    if boundary >= int(max_chars * 0.75):
+        cut = cut[:boundary]
+    return cut.rstrip(" ,;:-")
 
 
 def clamp_confidence(value: Any) -> float:
@@ -338,6 +363,31 @@ def ensure_missing_field(missing_fields: list[str], field: str) -> None:
         missing_fields.append(field)
 
 
+def _location_pattern(value: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![A-Za-z0-9]){re.escape(value)}(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def extract_input_code_value(text: str, allowed_values: list[str]) -> str | None:
+    haystack = str(text or "")
+    for value in sorted(normalize_allowed_values(allowed_values), key=len, reverse=True):
+        if _location_pattern(value).search(haystack):
+            return value
+    return None
+
+
+def extract_input_room(text: str) -> str | None:
+    haystack = str(text or "")
+    patterns = (
+        r"\broom\s+([A-Za-z0-9][A-Za-z0-9.-]{0,20})\b",
+        r"\brm\.?\s+([A-Za-z0-9][A-Za-z0-9.-]{0,20})\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, haystack, re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" .,-")
+    return None
+
+
 def parse_json_response(content: str) -> dict[str, Any]:
     text = content.strip()
     if text.startswith("```"):
@@ -350,8 +400,16 @@ def parse_json_response(content: str) -> dict[str, Any]:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
-        logger.warning("llm_json_parse status=failed error=%s", exc.__class__.__name__)
-        raise HTTPException(status_code=500, detail="Model returned invalid JSON") from exc
+        repaired = text + "}" if text.startswith("{") and text.count("{") == text.count("}") + 1 else None
+        if repaired is None:
+            logger.warning("llm_json_parse status=failed error=%s", exc.__class__.__name__)
+            raise HTTPException(status_code=500, detail="Model returned invalid JSON") from exc
+        try:
+            parsed = json.loads(repaired)
+        except json.JSONDecodeError as repair_exc:
+            logger.warning("llm_json_parse status=failed error=%s", exc.__class__.__name__)
+            raise HTTPException(status_code=500, detail="Model returned invalid JSON") from repair_exc
+        logger.info("llm_json_parse status=repaired repair=missing_final_object_brace")
     if not isinstance(parsed, dict):
         logger.warning("llm_json_parse status=failed error=non_object")
         raise HTTPException(status_code=500, detail="Model returned invalid JSON")
@@ -605,35 +663,35 @@ def validate_extracted_fields(
     data: dict[str, Any],
     valid_buildings: list[str],
     valid_priorities: list[str],
+    *,
+    input_text: str = "",
 ) -> dict[str, Any]:
     allowed_buildings = set(normalize_allowed_values(valid_buildings))
-    allowed_priorities = set(normalize_allowed_values(valid_priorities))
+    allowed_priorities_list = normalize_allowed_values(valid_priorities)
+    allowed_priorities = set(allowed_priorities_list)
     raw_extracted_fields = {
         "request_type": data.get("request_type"),
-        "building": clean_optional_text(data.get("building")),
-        "room": clean_optional_text(data.get("room")),
+        "building": None,
+        "room": None,
         "priority": clean_optional_text(data.get("priority")),
         "summary": clean_optional_text(data.get("summary")) or "",
     }
     invalid_code_candidates: dict[str, Any] = {}
 
-    request_type = data.get("request_type")
+    request_type = match_allowed_value(clean_optional_text(data.get("request_type")), sorted(ALLOWED_REQUEST_TYPES))
     if request_type not in ALLOWED_REQUEST_TYPES:
         request_type = "Unknown"
 
-    building = raw_extracted_fields["building"]
-    building = building or None
+    building = extract_input_code_value(input_text, valid_buildings)
+    room = extract_input_room(input_text)
 
-    room = raw_extracted_fields["room"]
-    room = room or None
-
-    priority = raw_extracted_fields["priority"]
+    priority = match_allowed_value(raw_extracted_fields["priority"], allowed_priorities_list)
     if priority not in allowed_priorities:
-        if priority:
-            invalid_code_candidates["priority"] = priority
+        if raw_extracted_fields["priority"]:
+            invalid_code_candidates["priority"] = raw_extracted_fields["priority"]
         priority = "NORMAL"
 
-    summary = raw_extracted_fields["summary"]
+    summary = clean_summary_text(raw_extracted_fields["summary"])
 
     missing_fields = normalize_missing_fields(data.get("missing_fields"))
     if not building or building not in allowed_buildings:
@@ -642,7 +700,10 @@ def validate_extracted_fields(
     if not room:
         ensure_missing_field(missing_fields, "room")
 
-    needs_human_review = bool(data.get("needs_human_review"))
+    review_value = data.get("needs_human_review")
+    if review_value is None:
+        review_value = data.get("human_review_recommended")
+    needs_human_review = bool(review_value)
     if not building or not room:
         needs_human_review = True
 
@@ -675,6 +736,8 @@ def validate_intake(
     field_data: dict[str, Any],
     valid_buildings: list[str],
     valid_priorities: list[str],
+    *,
+    input_text: str = "",
 ) -> tuple[str, float, dict[str, Any], dict[str, Any], dict[str, Any]]:
     validated = validate_extracted_fields(
         {
@@ -689,6 +752,7 @@ def validate_intake(
         },
         valid_buildings,
         valid_priorities,
+        input_text=input_text,
     )
     errors: list[str] = []
     if validated["request_type"] == "Unknown":
@@ -787,7 +851,7 @@ async def extract_work_order_fields(payload: Any, call_ollama_func: OllamaCaller
         response_format="json",
     )
     data = parse_json_response(content)
-    result = validate_extracted_fields(data, valid_buildings, valid_priorities)
+    result = validate_extracted_fields(data, valid_buildings, valid_priorities, input_text=payload.text)
     return result | {"_environment_code": env_code}
 
 
@@ -831,7 +895,7 @@ async def execute_ai_endpoint_for_test(
             prompt_id,
         )
         content = await call_ollama_func(messages, timeout=EXTRACTOR_TIMEOUT_SECONDS, temperature=meta["temperature"], model=meta["model"])
-        result = validate_extracted_fields(parse_json_response(content), valid_buildings, valid_priorities)
+        result = validate_extracted_fields(parse_json_response(content), valid_buildings, valid_priorities, input_text=input_text)
         result["prompt"] = meta
         return result
     if endpoint != "cmms-intake":
@@ -942,6 +1006,7 @@ async def cmms_intake(
                 extracted_data,
                 valid_buildings,
                 valid_priorities,
+                input_text=payload.text,
             )
         else:
             intake_messages, prompt_meta = intake_prompt_messages(prompt_context, prompt_id)
@@ -983,6 +1048,7 @@ async def cmms_intake(
                 extractor_data,
                 valid_buildings,
                 valid_priorities,
+                input_text=payload.text,
             )
         metadata = build_intake_metadata(
             source=intake_source or "text",

@@ -7,5 +7,5 @@ PARAMETER temperature 0
 PARAMETER top_p 0.9
 
 SYSTEM """
-Extract CMMS work request fields for a college/campus facilities environment. Return strict JSON only. Never claim a work order was created.
+Extract CMMS work request fields for a college/campus facilities environment. Do not predict building or room; those are input code fields merged by the API. Use exact CMMS code casing for request_type and priority, for example HVAC, General Maintenance, P3. Keep summary concise, at most 160 characters. Return strict JSON only. Never claim a work order was created.
 """

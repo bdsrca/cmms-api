@@ -8,8 +8,8 @@ from typing import Any
 from .schema import REQUIRED_ASSISTANT_KEYS, assistant_payload_errors
 
 
-LOCATION_KEYS = ("building", "room")
-REQUIRED_FIELD_KEYS = ("request_type", "building", "room", "priority", "summary")
+LOCATION_KEYS: tuple[str, ...] = ()
+REQUIRED_FIELD_KEYS = ("request_type", "priority", "summary")
 
 
 def _rate(count: int, total: int) -> float:
