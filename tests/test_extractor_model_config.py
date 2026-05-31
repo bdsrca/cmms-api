@@ -89,6 +89,25 @@ class ExtractorModelConfigTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(ai_endpoints, "OLLAMA_JSON_FORMAT_ENABLED", False):
             self.assertIsNone(ai_endpoints.ollama_response_format("json"))
 
+    def test_parse_json_response_repairs_missing_final_object_brace(self) -> None:
+        import app.ai_endpoints as ai_endpoints
+
+        parsed = ai_endpoints.parse_json_response(
+            '{"request_type":"hvac","priority":"p3","summary":"Leak",'
+            '"missing_fields":[],"human_review_recommended":true'
+        )
+
+        self.assertEqual(parsed["request_type"], "hvac")
+        self.assertTrue(parsed["human_review_recommended"])
+
+    def test_parse_json_response_rejects_unterminated_string(self) -> None:
+        from fastapi import HTTPException
+
+        import app.ai_endpoints as ai_endpoints
+
+        with self.assertRaises(HTTPException):
+            ai_endpoints.parse_json_response('{"summary":"This text never closes')
+
     def test_disabled_safety_reviewer_block_marks_reviewer_skipped(self) -> None:
         import app.ai_endpoints as ai_endpoints
 
@@ -119,6 +138,8 @@ class ExtractorModelConfigTests(unittest.IsolatedAsyncioTestCase):
         for prompt in (standalone_prompt, intake_field_prompt):
             self.assertIn("college", prompt)
             self.assertIn("campus", prompt)
+            self.assertIn("summary", prompt)
+            self.assertIn("160", prompt)
 
     async def test_extract_work_order_fields_passes_extractor_model_to_ollama(self) -> None:
         import app.ai_endpoints as ai_endpoints
@@ -130,8 +151,6 @@ class ExtractorModelConfigTests(unittest.IsolatedAsyncioTestCase):
             captured["response_format"] = response_format
             return (
                 '{"request_type":"HVAC",'
-                '"building":"ARC",'
-                '"room":"205",'
                 '"priority":"NORMAL",'
                 '"summary":"AC noise in room 205",'
                 '"missing_fields":[],'
@@ -152,6 +171,34 @@ class ExtractorModelConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["model"], "cmms-field-extractor-qwen3-8b-lora-v1")
         self.assertEqual(captured["response_format"], "json")
         self.assertEqual(result["building"], "ARC")
+        self.assertEqual(result["room"], "205")
+
+    async def test_extract_work_order_fields_ignores_model_location_predictions(self) -> None:
+        import app.ai_endpoints as ai_endpoints
+
+        async def fake_call_ollama(messages, timeout=120, temperature=None, model="qwen3:8b", response_format=None):
+            return (
+                '{"request_type":"HVAC",'
+                '"building":"WRONG",'
+                '"room":"999",'
+                '"priority":"NORMAL",'
+                '"summary":"AC noise",'
+                '"missing_fields":[],"needs_human_review":false,"confidence":0.9}'
+            )
+
+        payload = SimpleNamespace(
+            text="AC noise in ARC room 205",
+            environment_code=None,
+            valid_buildings=["ARC"],
+            valid_priorities=["NORMAL"],
+        )
+
+        result = await ai_endpoints.extract_work_order_fields(payload, call_ollama_func=fake_call_ollama)
+
+        self.assertEqual(result["building"], "ARC")
+        self.assertEqual(result["room"], "205")
+        self.assertEqual(result["raw_extracted_fields"]["building"], None)
+        self.assertEqual(result["raw_extracted_fields"]["room"], None)
 
     async def test_main_call_ollama_forwards_response_format(self) -> None:
         import app.main as main

@@ -73,6 +73,63 @@ class CodeNormalizerExtractionTests(unittest.TestCase):
         self.assertEqual(result["validated_fields"]["priority"], "URGENT")
         self.assertNotIn("priority", result["invalid_code_candidates"])
 
+    def test_priority_matches_configured_code_case_insensitively(self) -> None:
+        result = validate_extracted_fields(
+            {
+                "request_type": "HVAC",
+                "priority": "p3",
+                "summary": "ARC 205 is too hot.",
+                "missing_fields": [],
+                "human_review_recommended": True,
+            },
+            valid_buildings=["ARC"],
+            valid_priorities=["P1", "P2", "P3", "P4"],
+            input_text="ARC room 205 is too hot.",
+        )
+
+        self.assertEqual(result["priority"], "P3")
+        self.assertEqual(result["raw_extracted_fields"]["priority"], "p3")
+        self.assertEqual(result["validated_fields"]["priority"], "P3")
+        self.assertNotIn("priority", result["invalid_code_candidates"])
+        self.assertTrue(result["needs_human_review"])
+
+    def test_request_type_matches_configured_value_case_insensitively(self) -> None:
+        result = validate_extracted_fields(
+            {
+                "request_type": "general maintenance",
+                "priority": "NORMAL",
+                "summary": "Move furniture for painting.",
+                "missing_fields": [],
+                "needs_human_review": False,
+            },
+            valid_buildings=["ARC"],
+            valid_priorities=["NORMAL"],
+            input_text="Move furniture for painting in ARC room 205.",
+        )
+
+        self.assertEqual(result["request_type"], "General Maintenance")
+        self.assertEqual(result["validated_fields"]["request_type"], "General Maintenance")
+
+    def test_summary_is_clamped_for_validated_fields_and_raw_is_preserved(self) -> None:
+        long_summary = " ".join(["Water leak near the ceiling"] * 20)
+
+        result = validate_extracted_fields(
+            {
+                "request_type": "Plumbing",
+                "priority": "NORMAL",
+                "summary": long_summary,
+                "missing_fields": [],
+                "needs_human_review": False,
+            },
+            valid_buildings=["ARC"],
+            valid_priorities=["NORMAL"],
+            input_text="Water leak in ARC room 205.",
+        )
+
+        self.assertLessEqual(len(result["summary"]), 160)
+        self.assertEqual(result["raw_extracted_fields"]["summary"], long_summary)
+        self.assertEqual(result["validated_fields"]["summary"], result["summary"])
+
 
 class CodeNormalizerPureFunctionTests(unittest.TestCase):
     def test_skipped_block_is_stable(self) -> None:

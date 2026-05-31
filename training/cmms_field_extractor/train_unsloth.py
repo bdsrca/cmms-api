@@ -58,6 +58,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--per-device-train-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
     parser.add_argument("--dataset-num-proc", type=int)
+    parser.add_argument("--resume-from-checkpoint", help="Optional Trainer checkpoint path to resume from.")
     parser.add_argument(
         "--return-logits",
         action="store_true",
@@ -172,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
             packing=False,
         ),
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     trainer.save_model(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     return 0

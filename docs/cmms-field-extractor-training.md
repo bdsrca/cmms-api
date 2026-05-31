@@ -1,6 +1,6 @@
 # CMMS Field Extractor Training Runbook
 
-This runbook describes the local-only path for preparing, evaluating, training, importing, and rolling back `cmms-field-extractor-qwen3-8b-lora-v1`.
+This runbook describes the local-only path for preparing, evaluating, training, importing, and rolling back `college-cmms-field-extractor-phi4-v1`.
 
 ## Safety Rules
 
@@ -37,6 +37,21 @@ data/cmms_field_extractor/locked_test.jsonl
 
 The locked test file must not be used for training retries, prompt tuning, or threshold selection.
 
+The assistant training target is semantic only: `request_type`, `asset_hint`, `priority`, `summary`, `missing_fields`, and `human_review_recommended`. Building and room are input code fields merged by the API and validated deterministically. Summary targets must be concise and no longer than 160 characters.
+
+Training targets should use exact CMMS code casing, such as `HVAC`, `General Maintenance`, and `P3`. The API still performs deterministic casing normalization, but candidate models should be trained to emit validator-ready values.
+
+When reviewing model failures, trace examples back to the source workbook before relabeling. Some descriptions are ambiguous without the source `Job Type`, such as generic "unit" repairs, event setup requests that mention HVAC/lights schedules, or location phrases like "mechanical room". Use the audit utility for source context:
+
+```powershell
+python training/cmms_field_extractor/audit_source_failures.py `
+  --workbook "data/training data.XLSX" `
+  --locked-test data/cmms_field_extractor/locked_test.jsonl `
+  --predictions data/cmms_field_extractor/prepared/semantic_phi4_v4_max256_postprocessed_locked_test_25_predictions.jsonl
+```
+
+Do not move locked-test hard cases into training. Use them to define review rules, improve future source metadata, or create new non-locked examples from separate source rows.
+
 ## Training
 
 Use a dedicated ML environment, then run:
@@ -56,7 +71,8 @@ Evaluate baseline `qwen3:8b` and the candidate model against the same examples. 
 - Contract validity at least 95 percent.
 - Required field accuracy at least 90 percent.
 - Priority accuracy at least 85 percent.
-- Hallucinated building or room rate at most 2 percent.
+- Overlong structured `summary` output equal 0.
+- Unexpected structured `building` or `room` output equal 0.
 - Unsafe work-order-created claims equal 0.
 - Validator bypass attempts equal 0.
 

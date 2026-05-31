@@ -1,8 +1,8 @@
-# Example Ollama Modelfile for CMMS field extractor v1.
-# Replace paths with local GGUF files produced by the export step.
+# Ollama Modelfile for the college CMMS Phi4 v4 LoRA adapter.
+# v4 is the current best pilot candidate for semantic CMMS extraction.
 
-FROM ./phi4-mini.Q4_K_M.gguf
-ADAPTER ./college-cmms-field-extractor-phi4-v1.gguf
+FROM phi4-mini:latest
+ADAPTER C:/li/ai-api/models/cmms_field_extractor/college-cmms-semantic-extractor-phi4-v4-lora.gguf
 
 PARAMETER temperature 0
 PARAMETER top_p 0.9

@@ -11,8 +11,6 @@ from training.cmms_field_extractor.run_ollama_eval import (
 
 EXPECTED = {
     "request_type": "work_order_request",
-    "building": "North Campus",
-    "room": "B204",
     "asset_hint": None,
     "priority": "urgent",
     "summary": "Water leak in room B204",
@@ -30,8 +28,6 @@ class CmmsFieldExtractorEvalTests(unittest.TestCase):
                     "expected": EXPECTED,
                     "prediction": (
                         '{"request_type":"work_order_request",'
-                        '"building":"North Campus",'
-                        '"room":"B204",'
                         '"asset_hint":null,'
                         '"priority":"urgent",'
                         '"summary":"Water leak in room B204",'
@@ -49,10 +45,8 @@ class CmmsFieldExtractorEvalTests(unittest.TestCase):
         self.assertEqual(
             report["per_field_accuracy"],
             {
-                "building": 1.0,
                 "priority": 1.0,
                 "request_type": 1.0,
-                "room": 1.0,
                 "summary": 1.0,
             },
         )
@@ -69,8 +63,6 @@ class CmmsFieldExtractorEvalTests(unittest.TestCase):
                     "expected": EXPECTED,
                     "prediction": (
                         '{"request_type":"work_order_request",'
-                        '"building":"North Campus",'
-                        '"room":"B204",'
                         '"asset_hint":null,'
                         '"priority":"low",'
                         '"summary":"Work order created for water leak",'
@@ -111,7 +103,7 @@ class CmmsFieldExtractorOllamaEvalRunnerTests(unittest.TestCase):
             "messages": [
                 {"role": "system", "content": "Extract fields."},
                 {"role": "user", "content": "Leak in A101"},
-                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+                {"role": "assistant", "content": '{"request_type":"HVAC"}'},
             ]
         }
 
@@ -128,7 +120,7 @@ class CmmsFieldExtractorOllamaEvalRunnerTests(unittest.TestCase):
             "messages": [
                 {"role": "system", "content": "Loose prompt."},
                 {"role": "user", "content": "Leak in A101"},
-                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+                {"role": "assistant", "content": '{"request_type":"HVAC"}'},
             ]
         }
 
@@ -145,14 +137,14 @@ class CmmsFieldExtractorOllamaEvalRunnerTests(unittest.TestCase):
             "messages": [
                 {"role": "system", "content": "Extract fields."},
                 {"role": "user", "content": "Leak in A101"},
-                {"role": "assistant", "content": '{"building":"A","room":"101"}'},
+                {"role": "assistant", "content": '{"request_type":"HVAC"}'},
             ]
         }
 
         example = build_eval_example(record, example_id="sample-1", prediction="{}")
 
         self.assertEqual(example["id"], "sample-1")
-        self.assertEqual(example["expected"], {"building": "A", "room": "101"})
+        self.assertEqual(example["expected"], {"request_type": "HVAC"})
         self.assertEqual(example["prediction"], "{}")
 
     def test_build_ollama_chat_payload_requests_json_and_temperature_zero(self) -> None:
